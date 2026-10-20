@@ -283,7 +283,7 @@ a{color:var(--teal)}
 const MODULES = [
  {id:"A",letter:"A",weight:15,title:"External Financial Reporting Decisions",
   meta:"Financial statements & their use in decision-making",
-  topics:["Financial statements & users","Revenue recognition (ASC 606 / IFRS 15)","Inventory valuation","Long-lived assets & depreciation","Leases (ASC 842)","Income taxes (deferred)","Consolidations (VIE / voting interest)","US GAAP vs IFRS"],
+  topics:["Financial statements & users","Revenue recognition (ASC 606 / IFRS 15)","Inventory valuation","Long-lived assets & depreciation","Leases (ASC 842)","Income taxes (deferred)","Consolidations (VIE / voting interest)","US GAAP vs IFRS","Accounts receivable","Owners' equity & stock","Warranties & refinancing","Accounting changes"],
   notes:`
    <h3><span class="num">1</span>The four financial statements</h3>
    <p>Section A tests external reporting <span class="kw">from a decision-making viewpoint</span> — you are assumed to already know how to prepare statements. Focus on what each one tells a user.</p>
@@ -321,7 +321,7 @@ const MODULES = [
   ]},
  {id:"B",letter:"B",weight:20,title:"Planning, Budgeting, and Forecasting",
   meta:"Strategic planning, budget systems & forecasting techniques",
-  topics:["Strategic planning & SWOT","Budgeting concepts & behaviour","Master budget & components","Budget types (flexible, ZBB, ABB)","Forecasting & regression","Learning curves","Pro forma statements"],
+  topics:["Strategic planning & SWOT","Budgeting concepts & behaviour","Master budget & components","Budget types (flexible, ZBB, ABB)","Forecasting & regression","Learning curves","Pro forma statements","Ansoff & BCG","Probability & EVPI","Target costing"],
   notes:`
    <h3><span class="num">1</span>Strategic planning</h3>
    <ul><li>Mission → vision → objectives → strategy. Tools: <span class="kw">SWOT</span>, situational analysis, Porter's five forces, competitive analysis.</li>
@@ -357,7 +357,7 @@ const MODULES = [
   ]},
  {id:"C",letter:"C",weight:20,title:"Performance Management",
   meta:"Variance analysis, responsibility accounting & measures",
-  topics:["Standard costs & variances","DM / DL / MOH variances","Sales & mix variances","Responsibility centers","ROI, RI, EVA","Balanced scorecard","Transfer pricing"],
+  topics:["Standard costs & variances","DM / DL / MOH variances","Sales & mix variances","Responsibility centers","ROI, RI, EVA","Balanced scorecard","Transfer pricing","Mix & yield variances","Market size & share","Contribution income statement"],
   notes:`
    <h3><span class="num">1</span>Variance analysis</h3>
    <p>Variance = actual − standard/flexible budget. Break totals into <span class="kw">price/rate</span> and <span class="kw">quantity/efficiency</span> components.</p>
@@ -389,7 +389,7 @@ const MODULES = [
   ]},
  {id:"D",letter:"D",weight:15,title:"Cost Management",
   meta:"Costing systems, allocation & process improvement",
-  topics:["Cost concepts","Job order & process costing","Activity-based costing","Absorption vs variable costing","Joint & by-product costing","JIT, TOC, lean","Cost of quality"],
+  topics:["Cost concepts","Job order & process costing","Activity-based costing","Absorption vs variable costing","Joint & by-product costing","JIT, TOC, lean","Cost of quality","Cost of goods manufactured","Shared service allocation","Capacity levels","Quality tools (Six Sigma, TQM)"],
   notes:`
    <h3><span class="num">1</span>Cost concepts</h3>
    <ul><li>Behaviour: fixed, variable, mixed. Traceability: direct vs indirect. Timing: product vs period. Decision: <span class="kw">relevant</span> (differential, avoidable) vs sunk.</li></ul>
@@ -417,7 +417,7 @@ const MODULES = [
   ]},
  {id:"E",letter:"E",weight:15,title:"Internal Controls",
   meta:"Governance, risk, COSO frameworks & SOX",
-  topics:["Governance, risk & compliance","COSO Internal Control framework","COSO ERM framework","Sarbanes-Oxley (SOX)","Control types & segregation of duties","Systems controls & security"],
+  topics:["Governance, risk & compliance","COSO Internal Control framework","COSO ERM framework","Sarbanes-Oxley (SOX)","Control types & segregation of duties","Systems controls & security","17 COSO principles","FCPA","Deficiency levels","Input controls & encryption"],
   notes:`
    <h3><span class="num">1</span>Governance, risk & compliance</h3>
    <ul><li>Internal control provides reasonable (not absolute) assurance over: reliable reporting, effective/efficient operations, compliance with laws.</li></ul>
@@ -451,7 +451,7 @@ const MODULES = [
   ]},
  {id:"F",letter:"F",weight:15,title:"Technology and Analytics",
   meta:"Information systems, data governance & analytics",
-  topics:["Information systems & ERP","Data governance","Technology-enabled transformation","Types of data analytics","Data mining & BI","Data visualization"],
+  topics:["Information systems & ERP","Data governance","Technology-enabled transformation","Types of data analytics","Data mining & BI","Data visualization","Transaction cycles","Databases & SQL","Cyberattacks & defences","Blockchain & smart contracts","Monte Carlo simulation"],
   notes:`
    <h3><span class="num">1</span>Information systems</h3>
    <ul><li>Accounting information systems (AIS), <b>ERP</b> (integrated modules on one database), enterprise performance management, transaction vs decision-support systems.</li></ul>
@@ -493,7 +493,7 @@ async function sGet(k){ try{ if(window.storage){const r=await window.storage.get
 async function sSet(k,v){ mem[k]=v; try{ if(window.storage){await window.storage.set(k,JSON.stringify(v));} }catch(e){} }
 
 let PROGRESS = {}; // {A:{answered:n, correct:n, seen:{}}}
-async function loadProgress(){ PROGRESS = (await sGet('cma_progress')) || {}; MODULES.forEach(m=>{ if(!PROGRESS[m.id]) PROGRESS[m.id]={answered:0,correct:0}; }); }
+async function loadProgress(){ PROGRESS = (await sGet('cma_progress')) || {}; MODULES.forEach(m=>{ if(!PROGRESS[m.id]) PROGRESS[m.id]={answered:0,correct:0,topics:{}}; if(!PROGRESS[m.id].topics) PROGRESS[m.id].topics={}; }); }
 async function saveProgress(){ await sSet('cma_progress', PROGRESS); }
 
 /* ============================================================
@@ -563,24 +563,60 @@ function go(route){
 }
 
 /* ---------- Dashboard ---------- */
+function readiness(){
+  const TARGET=25; let wScore=0, wSum=0, details=[];
+  MODULES.forEach(m=>{
+    const p=PROGRESS[m.id], a=p.answered||0, acc=a?p.correct/a:0, conf=Math.min(1,a/TARGET), eff=acc*conf;
+    details.push({m,a,accPct:Math.round(acc*100),ready:Math.round(eff*100)});
+    wScore+=eff*m.weight; wSum+=m.weight;
+  });
+  return {overall: wSum?Math.round(wScore/wSum*100):0, details, totalA:MODULES.reduce((s,m)=>s+(PROGRESS[m.id].answered||0),0)};
+}
+function weakTopics(){
+  const out=[];
+  MODULES.forEach(m=>{ const t=PROGRESS[m.id].topics||{}; Object.keys(t).forEach(name=>{ const s=t[name]; if(s.a>=3){ const acc=s.c/s.a; if(acc<0.7) out.push({m,name,acc:Math.round(acc*100),a:s.a}); } }); });
+  out.sort((x,y)=>x.acc-y.acc); return out;
+}
+function readyLabel(o){ return o>=75?'On track':o>=50?'Getting there':o>=25?'Early days':'Just starting'; }
+function readyColor(o){ return o>=75?'#3fbf9a':o>=50?'#bd8f23':'#d98b5f'; }
 function renderDash(){
   crumb.innerHTML='Dashboard';
-  const totalA = MODULES.reduce((s,m)=>s+(PROGRESS[m.id].answered||0),0);
-  const totalC = MODULES.reduce((s,m)=>s+(PROGRESS[m.id].correct||0),0);
-  const acc = totalA? Math.round(totalC/totalA*100):0;
+  const R=readiness(), weak=weakTopics(), col=readyColor(R.overall);
   view.innerHTML=`
    <div class="hero">
      <div class="ring"></div><div class="ring2"></div>
      <div class="k">Certified Management Accountant · Part 1</div>
-     <h2>Everything you need to pass Part 1 — in one place.</h2>
-     <p>Notes, mind maps, unlimited AI practice questions, a voice tutor, podcast-style revision and a full 100-question mock. Structured exactly to the IMA Content Specification Outline.</p>
+     <h2>Your exam readiness, tracked as you practise.</h2>
+     <p>Answer practice questions and take mocks — this dashboard shows how ready you are and exactly which topics to revise before exam day.</p>
    </div>
-   <div class="grid g3" style="margin-top:18px">
-     <div class="card stat"><div class="n mono">${totalA}</div><div class="l">Questions practised</div></div>
-     <div class="card stat"><div class="n mono" style="color:var(--gold)">${acc}%</div><div class="l">Overall accuracy</div></div>
-     <div class="card stat"><div class="n mono">6</div><div class="l">Syllabus modules</div></div>
+   <div class="grid g2" style="margin-top:18px">
+     <div class="card" style="padding:24px;text-align:center">
+       <div class="l" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted)">Exam readiness</div>
+       <div class="mono" style="font-size:56px;font-weight:700;line-height:1.1;color:${col}">${R.overall}%</div>
+       <div style="font-weight:600;color:${col}">${readyLabel(R.overall)}</div>
+       <div class="bar" style="margin:14px 0 8px"><span style="width:${R.overall}%;background:${col}"></span></div>
+       <div class="meta" style="font-size:12px">Based on your accuracy across ${R.totalA} practised question${R.totalA===1?'':'s'}, weighted by each section's share of the exam.${R.totalA<30?' Practise more for a reliable score.':''}</div>
+     </div>
+     <div class="card" style="padding:20px">
+       <h3 style="font-size:16px;margin:0 0 12px">Readiness by section</h3>
+       ${R.details.map(d=>`<div style="display:flex;align-items:center;gap:10px;margin:10px 0">
+          <div class="badge" style="width:26px;height:26px;font-size:12px">${d.m.letter}</div>
+          <div style="flex:1;min-width:0"><div class="bar" style="margin:0"><span style="width:${d.ready}%;background:${readyColor(d.ready)}"></span></div></div>
+          <div class="mono" style="font-size:11.5px;width:92px;text-align:right;color:var(--muted)">${d.a?d.accPct+'% · '+d.a+'q':'not started'}</div>
+        </div>`).join('')}
+     </div>
    </div>
-   <h3 style="margin:30px 0 14px;font-size:18px">Syllabus modules <span class="mono" style="font-size:12px;color:var(--muted);font-weight:400">— weight = share of exam</span></h3>
+   ${weak.length?`<div class="card" style="padding:22px;margin-top:20px;border-left:3px solid var(--red)">
+     <h3 style="font-size:17px;margin:0 0 4px">⚠ Weak areas to revise</h3>
+     <p class="meta" style="margin:0 0 14px">Topics where you're scoring under 70%. Tap one to jump straight to that section's notes.</p>
+     <div>${weak.slice(0,10).map(w=>`
+       <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="renderModule('${w.m.id}','notes')">
+         <span class="mono" style="color:var(--red);font-weight:600;width:44px">${w.acc}%</span>
+         <div style="flex:1;min-width:0"><div style="font-weight:500">${esc(w.name)}</div><div class="meta" style="font-size:12px">Section ${w.m.letter} · ${w.a} attempted</div></div>
+         <span class="mono" style="font-size:11px;color:var(--teal)">Revise →</span>
+       </div>`).join('')}</div>
+   </div>`:`<div class="card" style="padding:20px;margin-top:20px"><h3 style="font-size:16px;margin:0 0 4px">Weak areas to revise</h3><p class="meta" style="margin:0">Answer a few questions per topic and any weak spots (under 70%) will appear here with a link to revise. ${R.totalA<10?'Start in the <b>Practice</b> tab of any module.':'Nothing under 70% so far — keep practising to confirm.'}</p></div>`}
+   <h3 style="margin:26px 0 14px;font-size:18px">Syllabus modules <span class="mono" style="font-size:12px;color:var(--muted);font-weight:400">— weight = share of exam</span></h3>
    <div class="card">${MODULES.map(m=>{
      const p=PROGRESS[m.id]; const a=p.answered||0; const ac=a?Math.round(p.correct/a*100):0;
      return `<div class="modrow" onclick="go('mod:${m.id}')">
@@ -590,9 +626,10 @@ function renderDash(){
        <div class="prog"><div class="p ${a?'done':''}">${a?ac+'%':'—'}</div><div class="l">${a} done</div></div>
      </div>`;}).join('')}</div>
    <div class="grid g2" style="margin-top:20px">
-     <div class="card" style="padding:22px"><h3 style="font-size:17px">Pilot mock exam</h3><p style="color:var(--muted);margin:8px 0 16px">100 MCQs, weighted like the real exam, 3-hour timer. Simulate exam day.</p><button class="btn" onclick="go('exam')">Start mock ▤</button></div>
-     <div class="card" style="padding:22px"><h3 style="font-size:17px">AI tutor — ask by voice</h3><p style="color:var(--muted);margin:8px 0 16px">Stuck on a concept or a calculation? Talk to the tutor and get a worked answer.</p><button class="btn gold" onclick="go('tutor')">Open tutor ✦</button></div>
-   </div>`;
+     <div class="card" style="padding:22px"><h3 style="font-size:17px">Pilot mock exam</h3><p style="color:var(--muted);margin:8px 0 16px">100 MCQs, weighted like the real exam, 3-hour timer. Feeds your readiness score.</p><button class="btn" onclick="go('exam')">Start mock ▤</button></div>
+     <div class="card" style="padding:22px"><h3 style="font-size:17px">Essay practice</h3><p style="color:var(--muted);margin:8px 0 16px">50+ scenarios per section, plus a timed 2-essay exam mode.</p><button class="btn gold" onclick="go('essays')">Practise essays ✎</button></div>
+   </div>
+   <div class="card" style="padding:16px 20px;margin-top:16px"><p class="meta" style="margin:0;font-size:12.5px">⚠ <b>What this score is — and isn't.</b> Readiness reflects <i>your</i> performance on this app's practice questions, weighted by exam section. It's a study guide, not a guarantee. Confirm against the official IMA CSO/LOS and licensed practice questions before exam day.</p></div>`;
 }
 
 /* ---------- Module ---------- */
@@ -609,7 +646,7 @@ function renderModule(id, tab){
    <div class="tabs">${tabs.map(t=>`<button class="tab ${t[0]===MODTAB?'active':''}" onclick="renderModule('${id}','${t[0]}')">${t[1]}</button>`).join('')}</div>
    <div id="modbody"></div>`;
   const body=document.getElementById('modbody');
-  if(MODTAB==='notes')  body.innerHTML=`<div class="card notes">${(NOTES[id]||m.notes||'')}<div class="callout" style="margin-top:30px"><b>Test yourself:</b> Head to <a onclick="renderModule('${id}','practice')" style="cursor:pointer">Practice</a> to work through questions on this section, or open <a onclick="renderModule('${id}','discuss')" style="cursor:pointer">Ask Tutor</a> to go deeper on any point.</div></div>`;
+  if(MODTAB==='notes')  body.innerHTML=hockPanel(id)+`<div class="card notes">${(NOTES[id]||m.notes||'')}<div class="callout" style="margin-top:30px"><b>Test yourself:</b> Head to <a onclick="renderModule('${id}','practice')" style="cursor:pointer">Practice</a> to work through questions on this section, or open <a onclick="renderModule('${id}','discuss')" style="cursor:pointer">Ask Tutor</a> to go deeper on any point.</div></div>`;
   if(MODTAB==='short')  renderShort(m,body);
   if(MODTAB==='mind')   renderMind(m,body);
   if(MODTAB==='practice') renderPractice(m,body);
@@ -921,11 +958,12 @@ function nf(n){ return Math.round(n).toLocaleString('en-US'); }
 function pf(n){ return (Math.round(n*10)/10).toLocaleString('en-US'); }
 function mkNum(correct, distractors, fmt){
   fmt=fmt||nf;
-  let nums=[correct];
-  (distractors||[]).forEach(d=>{ if(nums.length<4 && isFinite(d) && !nums.some(n=>Math.abs(n-d)<0.01)) nums.push(d); });
-  let k=1; const base=Math.max(1, Math.round(Math.abs(correct)*0.09));
-  while(nums.length<4){ const cand=correct + (k%2?1:-1)*base*Math.ceil(k/2); if(isFinite(cand)&&!nums.some(n=>Math.abs(n-cand)<0.01)) nums.push(cand); if(++k>60)break; }
-  while(nums.length<4) nums.push(correct+nums.length);
+  const nums=[correct], seen=new Set([fmt(correct)]);
+  const tryAdd=d=>{ if(nums.length<4 && isFinite(d)){ const s=fmt(d); if(!seen.has(s)){ seen.add(s); nums.push(d); } } };
+  (distractors||[]).forEach(tryAdd);
+  let k=1; const base=Math.max(Math.abs(correct)*0.09, Math.abs(correct)<20?0.5:1);
+  while(nums.length<4 && k<80){ tryAdd(correct + (k%2?1:-1)*base*Math.ceil(k/2)); k++; }
+  while(nums.length<4){ tryAdd(correct + nums.length*7.3); }
   const order=[0,1,2,3]; shuffle(order); const sh=order.map(i=>nums[i]);
   return {options: sh.map(fmt), answer: sh.indexOf(correct)};
 }
@@ -985,10 +1023,42 @@ const GEN={
   function(){ const items=[{d:'software bots automating repetitive rule-based tasks',t:'Robotic process automation (RPA)'},{d:'a distributed, immutable ledger',t:'Blockchain'},{d:'on-demand computing resources over the internet',t:'Cloud computing'},{d:'systems that learn patterns from data to predict',t:'Machine learning'}]; const it=pick(items); const o=mkStr(it.t,['Robotic process automation (RPA)','Blockchain','Cloud computing','Machine learning'].filter(x=>x!==it.t)); return Object.assign({q:`Which technology is described: ${it.d}?`,explanation:`That is ${it.t}.`,topic:'Technology transformation'}, o); }
  ]
 };
+/* ---------- Extra generators for HOCK-aligned extended topics ---------- */
+GEN.A.push(
+ function(){ const r=[ri(60,140,10)*1000,ri(30,70,5)*1000,ri(10,30,5)*1000,ri(5,15)*1000]; const pc=[2,5,15,40]; const req=r.reduce((s,b,i)=>s+b*pc[i]/100,0); const bal=ri(1,6)*1000; const a=req-bal; return Object.assign({q:`Aging: 0–30 days ${nf(r[0])} (2%), 31–60 ${nf(r[1])} (5%), 61–90 ${nf(r[2])} (15%), over 90 ${nf(r[3])} (40%). The allowance has a ${nf(bal)} credit balance. Bad-debt expense is:`,explanation:`Required allowance = ${nf(req)}. Expense = ${nf(req)} − ${nf(bal)} = ${nf(a)}.`,topic:'Accounts receivable'}, mkNum(a,[req,req+bal,a/2])); },
+ function(){ const sh=ri(5,20)*1000, par=pick([50,100]), rate=pick([5,6,8]); const ann=sh*par*rate/100; const yrs=ri(1,3); const decl=ann*(yrs+1)+ri(1,8)*10000; const common=decl-ann*(yrs+1); return Object.assign({q:`${nf(sh)} shares of ${rate}% cumulative preferred, par ${par}, with ${yrs} year(s) of dividends in arrears. The board declares ${nf(decl)}. How much goes to common shareholders?`,explanation:`Annual preferred = ${nf(ann)}. Preferred gets ${yrs+1} × ${nf(ann)} = ${nf(ann*(yrs+1))}. Common = ${nf(decl)} − ${nf(ann*(yrs+1))} = ${nf(common)}.`,topic:'Owners equity'}, mkNum(common,[decl-ann,decl,decl-ann*yrs])); },
+ function(){ const beg=ri(30,80,5)*1000, pur=ri(150,300,10)*1000, sales=ri(200,350,10)*1000, gm=pick([25,30,35,40]); const cogs=sales*(100-gm)/100; const a=beg+pur-cogs; return Object.assign({q:`Beginning inventory ${nf(beg)}, purchases ${nf(pur)}, sales ${nf(sales)}, normal gross margin ${gm}% of sales. Estimated ending inventory (gross profit method) is:`,explanation:`Goods available ${nf(beg+pur)} − estimated COGS (${nf(sales)} × ${100-gm}% = ${nf(cogs)}) = ${nf(a)}.`,topic:'Inventory valuation'}, mkNum(a,[beg+pur-sales*gm/100, beg+pur-sales, a+ri(5,15)*1000])); },
+ function(){ const price=ri(600,1200,50)*1000, a=ri(800,1500,50)*1000, l=ri(200,600,50)*1000; const gw=price-(a-l); if(gw<=0) return GEN.A[0](); return Object.assign({q:`P acquires 100% of S for ${nf(price)}. S's identifiable assets have a fair value of ${nf(a)} and liabilities ${nf(l)}. Goodwill is:`,explanation:`Goodwill = ${nf(price)} − (${nf(a)} − ${nf(l)}) = ${nf(gw)}.`,topic:'Business combinations'}, mkNum(gw,[price-a, price-l, a-l])); }
+);
+GEN.B.push(
+ function(){ const ph=pick([50,60,70]); const hi=ri(300,800,50)*1000, lo=-ri(100,300,50)*1000; const ev=(ph*hi+(100-ph)*lo)/100; const evp=ph*hi/100; const a=evp-ev; return Object.assign({q:`Launch: ${ph}% chance of profit ${nf(hi)}, ${100-ph}% chance of loss ${nf(-lo)}; not launching = 0. What is the expected value of perfect information?`,explanation:`EV(launch) = ${nf(ev)}. With perfect info you launch only on good demand: ${ph}% × ${nf(hi)} = ${nf(evp)}. EVPI = ${nf(evp)} − ${nf(ev)} = ${nf(a)}.`,topic:'Probability'}, mkNum(a,[evp, ev, -lo])); },
+ function(){ const p=ri(60,120,5), m=pick([20,25,30]); const a=p*(100-m)/100; return Object.assign({q:`The market price is ${p} per unit and the company requires a ${m}% profit margin on price. The target cost is:`,explanation:`Target cost = ${p} − (${p} × ${m}%) = ${pf(a)}.`,topic:'Establishing standards'}, mkNum(a,[p/(1+m/100), p-m, p*m/100], pf)); }
+);
+GEN.C.push(
+ function(){ const pa=pick([2,3,4]), pb=pick([6,8,10]), sa=pick([60,70]); const tot=ri(8,20)*100; const aa=Math.round(tot*sa/100)+pick([-60,-40,40,60]); const ab=tot-aa; const stdA=tot*sa/100, stdB=tot-stdA; const v=(aa-stdA)*pa+(ab-stdB)*pb; return Object.assign({q:`Standard mix: ${sa}% A at ${pa}/kg and ${100-sa}% B at ${pb}/kg. Actual input ${nf(tot)} kg: A ${nf(aa)} kg, B ${nf(ab)} kg. The materials mix variance is:`,explanation:`At standard mix: A ${nf(stdA)}, B ${nf(stdB)}. A: (${nf(aa)} − ${nf(stdA)}) × ${pa}; B: (${nf(ab)} − ${nf(stdB)}) × ${pb}. Total = ${vlabel(Math.round(v))}.`,topic:'Mix & yield variances'}, mkStr(vlabel(Math.round(v)),[vlabel(-Math.round(v)),vlabel(Math.round((aa-stdA)*pa)),vlabel(Math.round((ab-stdB)*pb)),vlabel(Math.round(v)+50),vlabel(Math.round(v)*2+10)])); },
+ function(){ const bm=ri(8,20)*1000, share=pick([8,10,12]), am=bm+pick([-2,-1,1,2,3])*1000, cm=ri(10,20); const v=(am-bm)*share/100*cm; const lab=v===0?'0':nf(Math.abs(v))+(v>0?' F':' U'); const alt=v===0?'1,000 F':nf(Math.abs(v))+(v>0?' U':' F'); return Object.assign({q:`Budgeted market ${nf(bm)} units, budgeted share ${share}%, budgeted average CM ${cm}. Actual market ${nf(am)} units. The market size variance is:`,explanation:`(Actual market ${nf(am)} − budget ${nf(bm)}) × ${share}% × ${cm} = ${lab}.`,topic:'Sales & mix variances'}, mkStr(lab,[alt, nf(Math.abs(am-bm)*cm)+(v>0?' F':' U'), nf(Math.abs(v)*2)+(v>0?' F':' U')])); }
+);
+GEN.D.push(
+ function(){ const dm=ri(30,80,5)*1000, dl=ri(20,60,5)*1000, oh=ri(20,60,5)*1000, bw=ri(5,25)*1000, ew=ri(5,25)*1000; const a=dm+dl+oh+bw-ew; return Object.assign({q:`Direct materials used ${nf(dm)}, direct labour ${nf(dl)}, overhead ${nf(oh)}, beginning WIP ${nf(bw)}, ending WIP ${nf(ew)}. Cost of goods manufactured is:`,explanation:`Total manufacturing costs ${nf(dm+dl+oh)} + ${nf(bw)} − ${nf(ew)} = ${nf(a)}.`,topic:'Cost of goods manufactured'}, mkNum(a,[dm+dl+oh, dm+dl+oh-bw+ew, a+ri(5,15)*1000])); },
+ function(){ const p=ri(2,6), i=ri(1,2), mv=ri(1,4), w=ri(6,20); const tot=p+i+mv+w; const a=Math.round(p/tot*1000)/10; return Object.assign({q:`Processing time ${p} hrs, inspection ${i} hr(s), move ${mv} hr(s), queue ${w} hrs. Manufacturing cycle efficiency is closest to:`,explanation:`MCE = processing ÷ total = ${p} ÷ ${tot} = ${pf(a)}%.`,topic:'Process analysis'}, mkNum(a,[(p+i)/tot*100,(tot-p)/tot*100,p/(tot-w)*100], x=>pf(x)+'%')); },
+ function(){ const fx=ri(60,150,10)*1000, vr=ri(3,8), b1=ri(4,8)*1000, b2=ri(3,7)*1000, u1=ri(3,8)*1000; const a=fx*b1/(b1+b2)+u1*vr; return Object.assign({q:`Dual-rate allocation: service fixed cost ${nf(fx)}, variable cost ${vr}/hr. Dept X budgeted ${nf(b1)} hrs and used ${nf(u1)}; Dept Y budgeted ${nf(b2)} hrs. Total charge to X is:`,explanation:`Fixed on budgeted share: ${nf(fx)} × ${nf(b1)}/${nf(b1+b2)} = ${nf(fx*b1/(b1+b2))}; variable on actual: ${nf(u1)} × ${vr} = ${nf(u1*vr)}. Total ${nf(a)}.`,topic:'Shared service cost allocation'}, mkNum(Math.round(a),[fx*u1/(b1+b2)+u1*vr, fx/2+u1*vr, fx*b1/(b1+b2)+b1*vr])); }
+);
+GEN.E.push(
+ function(){ const it=pick([{d:'rejects a payroll entry of 400 hours for one week',t:'Limit (range) check'},{d:'rejects letters typed into an amount field',t:'Field (format) check'},{d:'rejects a customer number not found in the customer master file',t:'Validity check'},{d:'detects a transposed account number using an extra calculated digit',t:'Check digit'},{d:'compares the sum of account numbers before and after processing',t:'Hash total'}]); return Object.assign({q:`An input control ${it.d}. Which control is this?`,explanation:`That is a ${it.t.toLowerCase()}.`,topic:'Systems controls & security'}, mkStr(it.t,['Limit (range) check','Field (format) check','Validity check','Check digit','Hash total'].filter(x=>x!==it.t).slice(0,3))); },
+ function(){ const it=pick([{d:'prohibits auditors from providing bookkeeping and certain other non-audit services to audit clients',t:'Section 201'},{d:'requires lead and reviewing audit partners to rotate every five years',t:'Section 203'},{d:'requires an independent audit committee responsible for overseeing the auditor',t:'Section 301'},{d:'imposes criminal penalties for destroying or altering records',t:'Section 802'},{d:'protects whistle-blowers from retaliation',t:'Section 806'}]); return Object.assign({q:`Which Sarbanes-Oxley section ${it.d}?`,explanation:`That is ${it.t}.`,topic:'Sarbanes-Oxley (SOX)'}, mkStr(it.t,['Section 201','Section 203','Section 301','Section 802','Section 806'].filter(x=>x!==it.t).slice(0,3))); },
+ function(){ const it=pick([{d:'a reasonable possibility that a material misstatement will not be prevented or detected on time',t:'Material weakness'},{d:'less severe than a material weakness but merits the audit committee’s attention',t:'Significant deficiency'},{d:'a control that does not allow timely prevention or detection of misstatements',t:'Control deficiency'}]); return Object.assign({q:`Which term describes ${it.d}?`,explanation:`That is a ${it.t.toLowerCase()}.`,topic:'Internal control deficiencies'}, mkStr(it.t,['Material weakness','Significant deficiency','Control deficiency','Compensating control'].filter(x=>x!==it.t))); }
+);
+GEN.F.push(
+ function(){ const it=pick([{d:'encrypts a company’s data and demands payment for the key',t:'Ransomware'},{d:'floods a website with traffic so legitimate users cannot reach it',t:'DDoS attack'},{d:'enters malicious code into an input field to manipulate the database',t:'SQL injection'},{d:'sends a fake email from the "CEO" requesting an urgent wire transfer',t:'Business email compromise'},{d:'self-replicates across a network without user action',t:'Worm'}]); return Object.assign({q:`Which attack ${it.d}?`,explanation:`That describes ${it.t}.`,topic:'Cyberattacks'}, mkStr(it.t,['Ransomware','DDoS attack','SQL injection','Business email compromise','Worm'].filter(x=>x!==it.t).slice(0,3))); },
+ function(){ const it=pick([{d:'grouping customers by buying behaviour with no predefined categories',t:'Clustering'},{d:'approving or rejecting credit applications into predefined classes',t:'Classification'},{d:'finding products frequently bought together',t:'Association rules'},{d:'flagging duplicate or unusual payments',t:'Anomaly detection'}]); return Object.assign({q:`Which data-mining technique fits: ${it.d}?`,explanation:`That is ${it.t.toLowerCase()}.`,topic:'Data mining & BI'}, mkStr(it.t,['Clustering','Classification','Association rules','Anomaly detection'].filter(x=>x!==it.t))); },
+ function(){ const it=pick([{d:'the provider manages everything and you simply use the software',t:'SaaS'},{d:'you rent virtual servers and storage and manage the rest yourself',t:'IaaS'},{d:'the provider supplies the operating system and development platform for your apps',t:'PaaS'}]); return Object.assign({q:`Which cloud service model: ${it.d}?`,explanation:`That is ${it.t}.`,topic:'Technology transformation'}, mkStr(it.t,['SaaS','IaaS','PaaS','Private cloud'].filter(x=>x!==it.t))); },
+ function(){ const it=pick([{d:'a field in the Invoices table that refers to the Customers table’s unique identifier',t:'Foreign key'},{d:'a field that uniquely identifies each record in a table',t:'Primary key'},{d:'organising tables so each fact is stored only once',t:'Normalisation'},{d:'a department-specific subset of a data warehouse',t:'Data mart'}]); return Object.assign({q:`Which database term describes ${it.d}?`,explanation:`That is a ${it.t.toLowerCase()}.`,topic:'Databases'}, mkStr(it.t,['Foreign key','Primary key','Normalisation','Data mart'].filter(x=>x!==it.t))); }
+);
+
 function genLocal(modId, n){
   const fns=GEN[modId]||[]; if(!fns.length) return [];
   const out=[], seen=new Set(); let guard=0;
-  while(out.length<n && guard<n*12){ guard++; const q=pick(fns)(); if(!seen.has(q.q)){ seen.add(q.q); out.push(q); } }
+  while(out.length<n && guard<n*12){ guard++; const q=pick(fns)(); const ok=q&&q.options&&q.options.length===4&&new Set(q.options).size===4&&q.answer>=0&&q.answer<4; if(ok&&!seen.has(q.q)){ seen.add(q.q); out.push(q); } }
   return out;
 }
 
@@ -1008,7 +1078,9 @@ function answerQ(id,oi){
   const st=PST[id], q=BANK[id][st.i];
   if(st.answered[st.i]!=null) return;
   st.answered[st.i]=oi;
-  PROGRESS[id].answered++; if(oi===q.answer) PROGRESS[id].correct++;
+  const P=PROGRESS[id], t=q.topic||'General';
+  P.answered++; P.topics=P.topics||{}; P.topics[t]=P.topics[t]||{a:0,c:0}; P.topics[t].a++;
+  if(oi===q.answer){ P.correct++; P.topics[t].c++; }
   saveProgress(); drawPractice(MODULES.find(x=>x.id===id));
 }
 function navQ(id,d){ PST[id].i+=d; drawPractice(MODULES.find(x=>x.id===id)); }
@@ -1231,7 +1303,7 @@ async function drawDocList(){
         <div class="meta" style="font-family:'IBM Plex Mono';font-size:11px">${fmtSize(d.size)} · ${new Date(d.added).toLocaleDateString()}</div>
       </div>
       <div style="display:flex;gap:8px;white-space:nowrap">
-        <button class="btn" style="padding:7px 14px" onclick="openDoc('${d.id}')">Open</button>
+        <select onchange="setHockLink('${d.id}',this.value)" title="Use this file as a HOCK book" style="border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px;background:var(--card)"><option value="">Use as…</option><option value="AC">HOCK A–C</option><option value="DF">HOCK D–F</option></select><button class="btn" style="padding:7px 14px" onclick="openDoc('${d.id}')">Open</button>
         <button class="btn ghost" style="padding:7px 12px" onclick="removeDoc('${d.id}')">✕</button>
       </div>
     </div>`).join('');
@@ -1255,6 +1327,56 @@ async function removeDoc(id){
   if(!confirm('Remove this document from your library?'))return;
   try{ await docDel(id); toast('Removed'); drawDocList(); }catch(e){ toast('Could not remove'); }
 }
+const HOCKMAP={"A":[{"u":1,"los":"A.1","t":"The Financial Statements, the Balance Sheet","f":"AC","p":11},{"u":2,"los":"A.1","t":"Comprehensive Income and the Income Statement","f":"AC","p":22},{"u":3,"los":"A.1","t":"The Statement of Comprehensive Income","f":"AC","p":28},{"u":4,"los":"A.1","t":"Statement of Owners’ Equity and Notes to FS","f":"AC","p":32},{"u":5,"los":"A.1","t":"Statement of Cash Flows – Introduction","f":"AC","p":35},{"u":6,"los":"A.1","t":"Operating Activities, the Indirect Method","f":"AC","p":44},{"u":7,"los":"A.1","t":"Investing and Financing Activities, SCF Disclosures","f":"AC","p":50},{"u":8,"los":"A.1","t":"Integrated Reporting","f":"AC","p":53},{"u":9,"los":"A.2","t":"Accounts Receivable","f":"AC","p":64},{"u":10,"los":"A.2","t":"Inventory and Inventory Tracking Methods","f":"AC","p":79},{"u":11,"los":"A.2","t":"Inventory Count, Errors, and Valuation","f":"AC","p":91},{"u":12,"los":"A.2","t":"Investments Overview, Debt Securities","f":"AC","p":99},{"u":13,"los":"A.2","t":"Equity Investments","f":"AC","p":106},{"u":14,"los":"A.2","t":"Business Combinations and Consolidations","f":"AC","p":116},{"u":15,"los":"A.2","t":"Recording Fixed Assets","f":"AC","p":123},{"u":16,"los":"A.2","t":"Depreciation of Fixed Assets and Impairment","f":"AC","p":125},{"u":17,"los":"A.2","t":"Intangible Assets","f":"AC","p":134},{"u":18,"los":"A.2","t":"Reclassification of Short-Term Liabilities","f":"AC","p":141},{"u":19,"los":"A.2","t":"Warranties","f":"AC","p":142},{"u":20,"los":"A.2","t":"Accounting for Income Taxes","f":"AC","p":147},{"u":21,"los":"A.2","t":"Leases","f":"AC","p":162},{"u":22,"los":"A.2","t":"Owners’ Equity and Retained Earnings","f":"AC","p":166},{"u":23,"los":"A.2","t":"Common Stock","f":"AC","p":168},{"u":24,"los":"A.2","t":"Preferred Stock","f":"AC","p":173},{"u":25,"los":"A.2","t":"Treasury Stock and Classification of Shares","f":"AC","p":176},{"u":26,"los":"A.2","t":"Revenue Recognition","f":"AC","p":178},{"u":27,"los":"A.2","t":"Right of Return and Consigned Goods","f":"AC","p":185},{"u":28,"los":"A.2","t":"Long-Term Contracts","f":"AC","p":187},{"u":29,"los":"A.2","t":"US GAAP / IFRS Differences","f":"AC","p":200},{"u":30,"los":"A.2","t":"Income Measurement","f":"AC","p":201}],"B":[{"u":1,"los":"B.1","t":"Strategic Planning: Overview, Mission, and Goals","f":"AC","p":207},{"u":2,"los":"B.1","t":"Analyzing External and Internal Environments","f":"AC","p":215},{"u":3,"los":"B.1","t":"Formulating and Implementing Strategies","f":"AC","p":224},{"u":4,"los":"B.1","t":"Other Planning Tools","f":"AC","p":232},{"u":5,"los":"B.2","t":"Budgeting Concepts","f":"AC","p":238},{"u":6,"los":"B.2","t":"Establishing Standards","f":"AC","p":250},{"u":7,"los":"B.3","t":"Forecasting Techniques, Regression Analysis","f":"AC","p":260},{"u":8,"los":"B.3","t":"Learning Curves","f":"AC","p":268},{"u":9,"los":"B.3","t":"Probability","f":"AC","p":276},{"u":10,"los":"B.4","t":"Budget Methodologies","f":"AC","p":283},{"u":11,"los":"B.5","t":"Annual Profit Plan and Supporting Schedules","f":"AC","p":292},{"u":12,"los":"B.5","t":"Preparing the Budget","f":"AC","p":294},{"u":13,"los":"B.5","t":"Ongoing Budgetary Reporting","f":"AC","p":309},{"u":14,"los":"B.5","t":"Answering Budgeting Calculation Questions","f":"AC","p":310},{"u":15,"los":"B.6","t":"Top-Level Planning and Analysis","f":"AC","p":313}],"C":[{"u":1,"los":"C.1","t":"Introduction to Cost and Variance Measures","f":"AC","p":317},{"u":2,"los":"C.1","t":"Direct Material Variances","f":"AC","p":328},{"u":3,"los":"C.1","t":"Direct Labor Variances","f":"AC","p":336},{"u":4,"los":"C.1","t":"Multiple Input or Multiple Class Variances","f":"AC","p":339},{"u":5,"los":"C.1","t":"Overhead Variances","f":"AC","p":350},{"u":6,"los":"C.1","t":"Sales Variances","f":"AC","p":366},{"u":7,"los":"C.1","t":"Market Variances","f":"AC","p":385},{"u":8,"los":"C.2","t":"Responsibility Centers","f":"AC","p":386},{"u":9,"los":"C.2","t":"Contribution Income Statement for Evaluation","f":"AC","p":390},{"u":10,"los":"C.2","t":"Transfer Pricing","f":"AC","p":393},{"u":11,"los":"C.3","t":"Performance Measures, ROI, and RI","f":"AC","p":400},{"u":12,"los":"C.3","t":"Multiple Performance Measures","f":"AC","p":411}],"D":[{"u":1,"los":"D.1","t":"Measurement Concepts, Classification of Costs","f":"DF","p":10},{"u":2,"los":"D.1","t":"Costing Methods","f":"DF","p":18},{"u":3,"los":"D.1","t":"Cost of Goods Sold and Manufactured","f":"DF","p":28},{"u":4,"los":"D.1","t":"Joint Product Costing","f":"DF","p":30},{"u":5,"los":"D.1","t":"Byproduct Costing","f":"DF","p":39},{"u":6,"los":"D.2","t":"Costing Systems, Process Costing","f":"DF","p":41},{"u":7,"los":"D.2","t":"Take a Break!","f":"DF","p":43},{"u":8,"los":"D.2","t":"Job-Order and Life-Cycle Costing","f":"DF","p":44},{"u":9,"los":"D.3","t":"Overhead Costs and Allocation","f":"DF","p":48},{"u":10,"los":"D.3","t":"Accounting for Overhead","f":"DF","p":59},{"u":11,"los":"D.3","t":"Activity-Based Costing","f":"DF","p":65},{"u":12,"los":"D.3","t":"Variable and Absorption Costing","f":"DF","p":74},{"u":13,"los":"D.3","t":"Shared Service Cost Allocation: Single","f":"DF","p":81},{"u":14,"los":"D.3","t":"Shared Service Cost Allocation: Multiple","f":"DF","p":86},{"u":15,"los":"D.3","t":"Estimating Fixed and Variable Costs","f":"DF","p":92},{"u":16,"los":"D.4","t":"Supply Chain and Lean Resource Management","f":"DF","p":98},{"u":17,"los":"D.4","t":"Just-In-Time Systems and MRP, MRPII, ERP","f":"DF","p":104},{"u":18,"los":"D.4","t":"Capacity Level and Management Decisions","f":"DF","p":113},{"u":19,"los":"D.5","t":"Business Process Improvement, the Value Chain","f":"DF","p":116},{"u":20,"los":"D.5","t":"Process Analysis","f":"DF","p":122},{"u":21,"los":"D.5","t":"Quality","f":"DF","p":126}],"E":[{"u":1,"los":"E.1","t":"Governance Principles","f":"DF","p":139},{"u":2,"los":"E.1","t":"Hierarchy of Corporate Governance","f":"DF","p":143},{"u":3,"los":"E.1","t":"Introduction to Internal Controls","f":"DF","p":152},{"u":4,"los":"E.1","t":"Transaction Controls","f":"DF","p":167},{"u":5,"los":"E.1","t":"Safeguarding Controls","f":"DF","p":168},{"u":6,"los":"E.1","t":"FCPA and Sarbanes-Oxley","f":"DF","p":173},{"u":7,"los":"E.1","t":"External Audit Opinions","f":"DF","p":179},{"u":8,"los":"E.2","t":"System Controls","f":"DF","p":189},{"u":9,"los":"E.2","t":"Internet Security","f":"DF","p":214},{"u":10,"los":"E.2","t":"Business Continuity Planning","f":"DF","p":220}],"F":[{"u":1,"los":"F.1","t":"Information Systems","f":"DF","p":222},{"u":2,"los":"F.1","t":"Transaction Cycles","f":"DF","p":227},{"u":3,"los":"F.1","t":"Databases","f":"DF","p":237},{"u":4,"los":"F.1","t":"Enterprise Resource Management","f":"DF","p":241},{"u":5,"los":"F.1","t":"Data Warehouse, Data Mart, Data Lake, and EPM","f":"DF","p":244},{"u":6,"los":"F.2","t":"Data Governance","f":"DF","p":247},{"u":7,"los":"F.2","t":"Data Life Cycle and Records Management","f":"DF","p":250},{"u":8,"los":"F.2","t":"Cyberattacks","f":"DF","p":253},{"u":9,"los":"F.2","t":"Defenses Against Cyberattacks","f":"DF","p":255},{"u":10,"los":"F.3","t":"Technology-Enabled Finance Transformation","f":"DF","p":258},{"u":11,"los":"F.3","t":"Artificial Intelligence","f":"DF","p":262},{"u":12,"los":"F.3","t":"Cloud Computing","f":"DF","p":264},{"u":13,"los":"F.3","t":"Blockchain and Smart Contracts","f":"DF","p":268},{"u":14,"los":"F.4","t":"Data Analytics","f":"DF","p":279},{"u":15,"los":"F.4","t":"Data Mining","f":"DF","p":284},{"u":16,"los":"F.4","t":"Types of Data Analytics","f":"DF","p":290},{"u":17,"los":"F.4","t":"Analytic Tools-Sensitivity and Simulation Analysis","f":"DF","p":309},{"u":18,"los":"F.4","t":"Visualization or Visual Discovery","f":"DF","p":311}]};
+/* ---------- HOCK cross-reference: open the user's own HOCK PDF at the exact study unit ---------- */
+const HOCK_OFFSET=8; // PDF page index minus printed book page
+let HOCKLINK=null;
+async function getHockLinks(){ if(HOCKLINK) return HOCKLINK; HOCKLINK=(await sGet('hock_links'))||{}; return HOCKLINK; }
+async function setHockLink(id,val){
+  const L=await getHockLinks();
+  ['AC','DF'].forEach(k=>{ if(L[k]===id) delete L[k]; });
+  if(val) L[val]=id;
+  await sSet('hock_links',L);
+  toast(val?('Linked as HOCK '+(val==='AC'?'A–C':'D–F')):'Unlinked');
+  drawDocList();
+}
+async function findHockDoc(f){
+  const L=await getHockLinks();
+  if(L[f]){ try{ const d=await docGet(L[f]); if(d) return d; }catch(e){} }
+  let docs=[]; try{ docs=await docAll(); }catch(e){ return null; }
+  const rx=f==='AC'?/(^|[^a-z])a\s*[-–_ ]\s*c([^a-z]|$)/i:/(^|[^a-z])d\s*[-–_ ]\s*f([^a-z]|$)/i;
+  return docs.find(d=>{ const n=d.name.replace(/\.pdf$/i,''); return /hock/i.test(n)&&rx.test(n); })||null;
+}
+function hockPanel(id){
+  const L=(typeof HOCKMAP!=='undefined'&&HOCKMAP[id])||[]; if(!L.length) return '';
+  const f=('ABC'.indexOf(id)>=0)?'AC':'DF', fl=f==='AC'?'A–C':'D–F';
+  return `<details class="card" style="padding:14px 18px;margin-bottom:16px">
+    <summary style="cursor:pointer;font-weight:600;color:var(--teal);list-style:none">📘 Read the full HOCK text — all ${L.length} study units for Section ${id} ▾</summary>
+    <p class="meta" style="margin:10px 0 12px;font-size:13px">One-time setup: upload <b>your own</b> HOCK Part 1 ${fl} PDF in <a onclick="go('docs')" style="cursor:pointer">My Documents</a> (it stays private in this browser). Then tap any unit to open HOCK at exactly that page — notes here, full HOCK depth one tap away.</p>
+    <div>${L.map((u,i)=>`<div onclick="openHockUnit('${id}',${i})" style="display:flex;gap:12px;align-items:baseline;padding:8px 4px;border-bottom:1px solid var(--line);cursor:pointer">
+        <span class="mono" style="font-size:11px;color:var(--muted);width:46px;flex:none">SU ${u.u}</span>
+        <span style="flex:1;font-size:14px">${esc(u.t)} <span class="meta" style="font-size:11px">· ${u.los}</span></span>
+        <span class="mono" style="font-size:11px;color:var(--teal);flex:none">p.${u.p-HOCK_OFFSET} ↗</span></div>`).join('')}</div>
+  </details>`;
+}
+async function openHockUnit(id,i){
+  const u=HOCKMAP[id][i];
+  const d=await findHockDoc(u.f);
+  if(!d){ toast('Upload your HOCK '+(u.f==='AC'?'A–C':'D–F')+' PDF in My Documents first'); go('docs'); return; }
+  if(_docURL) URL.revokeObjectURL(_docURL);
+  _docURL=URL.createObjectURL(d.blob);
+  const src=_docURL+'#page='+u.p;
+  crumb.innerHTML='HOCK · Section '+id+' · SU '+u.u;
+  view.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="renderModule('${id}','notes')">← Back to Section ${id} notes</button>
+      <div style="flex:1;min-width:180px"><b>SU ${u.u}: ${esc(u.t)}</b><div class="meta" style="font-size:12px">HOCK Part 1 ${u.f==='AC'?'A–C':'D–F'} · book page ${u.p-HOCK_OFFSET}</div></div>
+      <a class="btn" href="${src}" target="_blank" rel="noopener" style="text-decoration:none">Open in new tab ↗</a>
+    </div>
+    <iframe src="${src}" style="width:100%;height:80vh;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>
+    <p class="meta" style="font-size:12px;margin-top:8px">If the viewer opens on page 1 (some phone browsers ignore page links), use "Open in new tab" or scroll to book page ${u.p-HOCK_OFFSET}.</p>`;
+}
+
 const LIBRARY=[
  {cat:'Official & Exam (IMA)', note:'Start here — the exam is literally defined by these documents.', items:[
    {n:'IMA — CMA Certification', d:'The official Candidate Handbook, Content Specification Outlines (CSO) and Learning Outcome Statements (LOS) — the exact blueprint of what is tested. Cross-check these notes against the LOS.', u:'https://www.imanet.org/ima-certifications/cma-certification'},
@@ -1391,7 +1513,9 @@ function examNav(d){ EXAM.i+=d; drawExam(); }
 function finishExam(){
   clearInterval(EXAM.timer); EXAM.active=false;
   let correct=0; const bySec={};
-  EXAM.qs.forEach((q,i)=>{ const ok=EXAM.ans[i]===q.answer; if(ok)correct++; bySec[q._mod]=bySec[q._mod]||{c:0,t:0}; bySec[q._mod].t++; if(ok)bySec[q._mod].c++; });
+  EXAM.qs.forEach((q,i)=>{ const ok=EXAM.ans[i]===q.answer; if(ok)correct++; bySec[q._mod]=bySec[q._mod]||{c:0,t:0}; bySec[q._mod].t++; if(ok)bySec[q._mod].c++;
+    if(EXAM.ans[i]!=null && q._mod && PROGRESS[q._mod]){ const P=PROGRESS[q._mod], t=q.topic||'General'; P.answered++; P.topics=P.topics||{}; P.topics[t]=P.topics[t]||{a:0,c:0}; P.topics[t].a++; if(ok){P.correct++;P.topics[t].c++;} } });
+  saveProgress();
   const pct=Math.round(correct/EXAM.qs.length*100);
   const scaled=Math.round(correct/EXAM.qs.length*500); // rough scaled feel (pass ~360)
   const pass=pct>=72;
@@ -1877,6 +2001,201 @@ For a discount, interest expense (6% of a growing carrying value) exceeds the ca
 </tbody>
 </table>
 <div class="callout"><b>How to study Section A:</b> (1) Make sure the four statements and how they connect feel obvious. (2) Drill the mechanical bits with numbers — indirect cash flow, FIFO/LIFO, depreciation, deferred tax. (3) Memorise this GAAP-vs-IFRS table cold. (4) Redo every "Try it yourself" box above without looking. Accuracy note: verify final details against the official IMA Learning Outcome Statements and a licensed provider before exam day.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="a-x-ar"><span class="num">10</span>Accounts receivable — valuation, aging & financing</h3>
+<p class="lead">Receivables are money customers owe you. Not all of it will be collected, so the balance sheet shows the amount you <i>expect</i> to collect — the <b>net realisable value</b>. The exam tests how that estimate is made and how companies turn receivables into cash early.</p>
+<h4>10.1 Direct write-off vs allowance method</h4>
+<ul>
+<li><b>Direct write-off</b> — expense bad debts only when a specific account is proven uncollectible. Simple, but <b>not GAAP</b> (except when immaterial) because the expense lands in a later period than the sale — it breaks matching.</li>
+<li><b>Allowance method</b> (GAAP and IFRS) — estimate uncollectibles at period end, record <b>bad debt expense</b> and a contra-asset <b>allowance for doubtful accounts</b>. When a specific account is written off later, debit the allowance and credit receivables — <b>no income-statement effect</b> and no change in net receivables.</li>
+</ul>
+<h4>10.2 Two ways to estimate the allowance</h4>
+<table><thead><tr><th>Approach</th><th>Basis</th><th>Effect</th></tr></thead><tbody>
+<tr><td><b>Percentage of sales</b> (income-statement approach)</td><td>% of credit sales</td><td>The result IS the bad-debt expense; the existing allowance balance is ignored.</td></tr>
+<tr><td><b>Aging / % of receivables</b> (balance-sheet approach)</td><td>% of ending receivables by age bucket</td><td>The result is the REQUIRED ENDING allowance; expense = the adjustment needed to reach it.</td></tr>
+</tbody></table>
+<div class="ex"><span class="lbl">Worked example — aging method</span>
+<div class="formula">Age bucket      Balance    Est. uncollectible   Required
+0–30 days       100,000          2%              2,000
+31–60 days       50,000          5%              2,500
+61–90 days       20,000         15%              3,000
+Over 90 days     10,000         40%              4,000
+Required ending allowance                       11,500
+Existing allowance (credit balance)            − 3,000
+Bad debt expense to record                       8,500</div>
+If instead the allowance had a <b>debit</b> balance of 1,000 (more written off than provided), expense = 11,500 + 1,000 = 12,500.<br>
+<b>Percentage-of-sales version:</b> credit sales 800,000 × 1% = 8,000 expense — added to whatever balance exists.</div>
+<p><b>Under U.S. GAAP's CECL model</b> (ASC 326) the allowance reflects <b>lifetime expected credit losses</b> from day one. <span class="tag ifrs">IFRS 9</span> uses an expected-credit-loss model too; for trade receivables a simplified lifetime approach is normally applied.</p>
+<h4>10.3 Turning receivables into cash early</h4>
+<ul>
+<li><b>Pledging</b> — receivables used as collateral for a loan. They stay on the balance sheet; disclose the pledge.</li>
+<li><b>Assignment</b> — specific receivables formally assigned to a lender as security.</li>
+<li><b>Factoring</b> — selling receivables to a factor at a discount. <b>Without recourse</b>: the factor bears the credit risk → usually a true sale, derecognise the receivables. <b>With recourse</b>: you still bear the risk → may be treated as a <b>secured borrowing</b> if control is not surrendered.</li>
+</ul>
+<div class="ex"><span class="lbl">Worked example — factoring without recourse</span>
+Factor 100,000 of receivables; factor charges a 3% fee and holds back 5% for returns.
+<div class="formula">Cash received          = 100,000 − 3,000 − 5,000 = 92,000
+Due from factor (holdback) =                    5,000
+Loss on sale of receivables =                   3,000
+Receivables removed    =                      100,000</div></div>
+<div class="callout"><b>Ratio link:</b> receivables turnover = net credit sales ÷ average net receivables; days sales outstanding = 365 ÷ turnover. Factoring lowers receivables and so improves these ratios — a point the exam likes in "decision-use" questions.</div>
+
+<h3 id="a-x-inv"><span class="num">11</span>Inventory systems, ownership, errors & estimation</h3>
+<h4>11.1 Periodic vs perpetual</h4>
+<ul><li><b>Perpetual</b> — inventory and COGS updated with every purchase and sale (modern ERP).</li>
+<li><b>Periodic</b> — inventory counted at period end; COGS is the plug: <code>Beginning inventory + Purchases − Ending inventory = COGS</code>.</li></ul>
+<p>FIFO gives the same answer under both systems; LIFO and average can differ because the perpetual system computes costs at each sale (moving average).</p>
+<h4>11.2 Who owns goods in transit or on consignment?</h4>
+<table><thead><tr><th>Situation</th><th>Belongs in whose inventory?</th></tr></thead><tbody>
+<tr><td><b>FOB shipping point</b> — goods in transit</td><td><b>Buyer</b> (title passes when shipped)</td></tr>
+<tr><td><b>FOB destination</b> — goods in transit</td><td><b>Seller</b> (title passes on arrival)</td></tr>
+<tr><td><b>Consigned goods</b> held by an agent (consignee)</td><td><b>Consignor</b> (the owner) — never the consignee</td></tr>
+</tbody></table>
+<h4>11.3 Inventory errors — they self-correct over two years</h4>
+<div class="ex"><span class="lbl">Worked example — overstated ending inventory</span>
+Year 1 ending inventory is overstated by 10,000.
+<div class="formula">YEAR 1: ending inventory ↑10,000 → COGS ↓10,000 → net income ↑10,000
+YEAR 2: beginning inventory ↑10,000 → COGS ↑10,000 → net income ↓10,000
+End of Year 2: retained earnings is CORRECT again (the error reversed)</div>
+Rule: ending inventory and net income move in the <b>same</b> direction; beginning inventory and net income move in <b>opposite</b> directions.</div>
+<h4>11.4 Estimating inventory — gross profit method</h4>
+<p>Used when a count is impossible (fire, theft, interim reports).</p>
+<div class="ex"><span class="lbl">Worked example — gross profit method</span>
+Beginning inventory 50,000; purchases 200,000; sales 240,000; normal gross margin 30% of sales.
+<div class="formula">Goods available for sale = 50,000 + 200,000 = 250,000
+Estimated COGS          = 240,000 × (1 − 30%) = 168,000
+Estimated ending inventory = 250,000 − 168,000 = 82,000</div>
+Trap: if the margin is given as a <b>markup on cost</b> (e.g. 40% on cost), convert first: margin on sales = 40 ÷ 140 = 28.6%.</div>
+
+<h3 id="a-x-bc"><span class="num">12</span>Business combinations — the acquisition method</h3>
+<p>When one company acquires control of another, <span class="tag gaap">ASC 805</span> / <span class="tag ifrs">IFRS 3</span> require the <b>acquisition method</b>: identify the acquirer, measure identifiable assets acquired and liabilities assumed at <b>fair value</b>, recognise goodwill (or a bargain-purchase gain).</p>
+<div class="formula">Goodwill = Consideration transferred (+ fair value of NCI)
+           − Fair value of identifiable net assets acquired</div>
+<div class="ex"><span class="lbl">Worked example — goodwill</span>
+P pays 900,000 cash for 100% of S. Fair value of S's identifiable assets 1,200,000; liabilities 500,000.
+<div class="formula">Fair value of net identifiable assets = 1,200,000 − 500,000 = 700,000
+Goodwill = 900,000 − 700,000 = 200,000</div>
+If P had paid only 650,000, the 50,000 shortfall is a <b>bargain-purchase gain</b> recognised in income (after re-checking the valuations).</div>
+<p><b>Key points:</b> acquisition-related costs (legal, advisory) are <b>expensed</b>, not added to goodwill. Goodwill is not amortised by public companies — it is tested for impairment. Under IFRS, NCI may be measured at fair value ("full goodwill") or at its share of net assets ("partial goodwill"); U.S. GAAP requires fair value.</p>
+
+<h3 id="a-x-fa"><span class="num">13</span>Fixed assets — disposals and more on intangibles</h3>
+<div class="ex"><span class="lbl">Worked example — disposal gain or loss</span>
+Machine cost 50,000; accumulated depreciation 35,000; sold for 18,000.
+<div class="formula">Carrying (book) value = 50,000 − 35,000 = 15,000
+Gain on disposal = 18,000 − 15,000 = 3,000
+(remove both the cost and the accumulated depreciation from the books)</div></div>
+<ul>
+<li><b>Interest capitalisation</b> — interest on money borrowed to construct an asset for own use is capitalised during construction (GAAP and IAS 23).</li>
+<li><b>Purchased intangibles</b> are capitalised at cost; <b>internally generated</b> intangibles are generally expensed (IFRS exception: qualifying development costs).</li>
+<li><b>Software to be sold</b> (GAAP) — expense until <b>technological feasibility</b>, then capitalise until general release.</li>
+<li><b>Internal-use software</b> (GAAP) — expense preliminary and post-implementation stages; capitalise the <b>application development stage</b>.</li>
+</ul>
+
+<h3 id="a-x-liab"><span class="num">14</span>Short-term debt refinancing & warranties</h3>
+<h4>14.1 Reclassifying short-term obligations</h4>
+<p>A loan due within 12 months is normally <b>current</b>. It may be shown as <b>non-current</b> if the company will refinance it on a long-term basis:</p>
+<table><thead><tr><th><span class="tag gaap">U.S. GAAP</span></th><th><span class="tag ifrs">IFRS</span> <span class="tag ias">IAS 1</span></th></tr></thead><tbody>
+<tr><td>Intent to refinance <b>and</b> ability shown by actual refinancing <b>after the balance-sheet date but before the statements are issued</b>, or a non-cancellable financing agreement.</td><td>The right to defer settlement for at least 12 months must <b>exist at the reporting date</b>. A refinancing agreed after year-end does <b>not</b> change classification.</td></tr>
+</tbody></table>
+<h4>14.2 Warranties — two types</h4>
+<ul>
+<li><b>Assurance-type warranty</b> — promises the product works as specified. Not a separate performance obligation: accrue an estimated <b>warranty expense and liability</b> in the period of sale.</li>
+<li><b>Service-type warranty</b> (e.g. an extended warranty sold separately) — a <b>separate performance obligation</b>: defer the revenue and recognise it over the coverage period.</li>
+</ul>
+<div class="ex"><span class="lbl">Worked example — both warranty types</span>
+<div class="formula">ASSURANCE: 1,000 units sold; 3% expected to fail; repair cost 200 each
+Warranty expense & liability = 1,000 × 3% × 200 = 6,000 (recorded in the sale year)
+Later repairs reduce the liability, not expense.
+
+SERVICE-TYPE: 3-year extended warranty sold for 120
+Unearned revenue 120 at sale → recognise 40 revenue each year</div></div>
+
+<h3 id="a-x-eq"><span class="num">15</span>Owners' equity — common, preferred & treasury stock</h3>
+<h4>15.1 Issuing common stock</h4>
+<div class="ex"><span class="lbl">Worked example — issuing shares above par</span>
+Issue 10,000 shares, par 1, for 15 each.
+<div class="formula">Dr Cash                             150,000
+   Cr Common stock (10,000 × 1)          10,000
+   Cr Additional paid-in capital        140,000</div></div>
+<h4>15.2 Preferred stock features</h4>
+<ul>
+<li><b>Cumulative</b> — unpaid dividends accumulate as <b>dividends in arrears</b> and must be paid before common shareholders get anything. Arrears are <b>disclosed</b>, not recorded as a liability, until declared.</li>
+<li><b>Participating</b> — shares in extra dividends beyond the stated rate.</li>
+<li><b>Convertible</b> — can be exchanged into common shares. <b>Callable</b> — issuer can redeem at a set price.</li>
+<li><b>Mandatorily redeemable</b> preferred stock is classified as a <b>liability</b>, not equity.</li>
+</ul>
+<div class="ex"><span class="lbl">Worked example — dividends in arrears</span>
+10,000 shares of 6% cumulative preferred, par 100 → annual preferred dividend = 60,000. No dividends were paid for 2 years. In Year 3 the board declares 200,000.
+<div class="formula">Preferred: arrears 2 × 60,000 = 120,000 + current 60,000 = 180,000
+Common: 200,000 − 180,000 = 20,000</div>
+If the preferred were <b>non-cumulative</b>, preferred would get only 60,000 and common 140,000.</div>
+<h4>15.3 Treasury stock (cost method)</h4>
+<div class="ex"><span class="lbl">Worked example — buy back and reissue</span>
+<div class="formula">Buy back 1,000 shares at 30:   Dr Treasury stock 30,000 / Cr Cash 30,000
+Reissue 600 at 35:  Dr Cash 21,000 / Cr Treasury stock 18,000 / Cr APIC–treasury 3,000
+Reissue 400 at 25:  Dr Cash 10,000 / Dr APIC–treasury 2,000 / Cr Treasury stock 12,000
+(If APIC–treasury runs out, debit retained earnings.)</div>
+Treasury stock is a <b>contra-equity</b> account — never an asset — and no gain or loss ever goes to the income statement.</div>
+<h4>15.4 Stock dividends and splits</h4>
+<table><thead><tr><th>Event</th><th>Accounting</th><th>Total equity</th></tr></thead><tbody>
+<tr><td>Cash dividend</td><td>Liability at declaration; reduces RE</td><td>Decreases</td></tr>
+<tr><td>Small stock dividend (&lt;20–25%)</td><td>Transfer <b>fair value</b> from RE to paid-in capital</td><td>Unchanged</td></tr>
+<tr><td>Large stock dividend (&gt;20–25%)</td><td>Transfer <b>par value</b> from RE</td><td>Unchanged</td></tr>
+<tr><td>Stock split</td><td>No entry; par per share adjusts, shares multiply</td><td>Unchanged</td></tr>
+</tbody></table>
+
+<h3 id="a-x-rev"><span class="num">16</span>Revenue — returns, consignment, principal vs agent & long-term contracts</h3>
+<h4>16.1 Right of return</h4>
+<div class="ex"><span class="lbl">Worked example — expected returns</span>
+Sales 100,000 (cost 60,000); 5% expected to be returned.
+<div class="formula">Revenue recognised        = 100,000 × 95% = 95,000
+Refund liability           =                  5,000
+COGS                       = 60,000 × 95% =  57,000
+Asset: right to recover goods = 60,000 × 5% = 3,000</div></div>
+<h4>16.2 Consignment, bill-and-hold, principal vs agent</h4>
+<ul>
+<li><b>Consignment</b> — the consignor recognises revenue only when the consignee sells to the end customer (control has not passed on delivery to the consignee).</li>
+<li><b>Bill-and-hold</b> — revenue only if the customer has obtained control (substantive reason, goods identified and ready, cannot be used for others).</li>
+<li><b>Principal vs agent</b> — a <b>principal</b> controls the good before transfer and records <b>gross</b> revenue; an <b>agent</b> arranges the sale and records only its <b>net</b> commission. (A travel website selling hotel rooms is usually an agent.)</li>
+</ul>
+<h4>16.3 Long-term contracts — including loss contracts</h4>
+<div class="ex"><span class="lbl">Worked example — over-time recognition across years</span>
+Contract price 1,000,000; estimated total cost 800,000.
+<div class="formula">            Cost to date  % complete   Cumulative revenue  This year's revenue
+Year 1       240,000      30%            300,000             300,000
+Year 2       600,000      75%            750,000             450,000
+Year 3       800,000     100%          1,000,000             250,000</div></div>
+<div class="ex"><span class="lbl">Worked example — a loss contract</span>
+Price 1,000,000. Costs to date 300,000; estimated remaining cost 800,000 → total cost 1,100,000.
+<div class="formula">Expected total loss = 1,000,000 − 1,100,000 = (100,000)
+Recognise the ENTIRE 100,000 loss immediately — not just the % complete share.</div></div>
+
+<h3 id="a-x-inc"><span class="num">17</span>Income measurement — special items & accounting changes</h3>
+<ul>
+<li><b>Discontinued operations</b> — a disposal representing a <b>strategic shift</b> with a major effect (e.g. exiting a major line or region). Reported separately, <b>net of tax</b>, below income from continuing operations.</li>
+<li><b>Unusual or infrequent items</b> — shown within continuing operations (often as a separate line), not net of tax. Extraordinary items no longer exist.</li>
+<li><b>Gains vs revenues</b> — revenues arise from central operations; gains from peripheral activities (e.g. selling equipment).</li>
+</ul>
+<table><thead><tr><th>Type of change</th><th>Treatment</th><th>Example</th></tr></thead><tbody>
+<tr><td><b>Change in accounting principle</b></td><td><b>Retrospective</b> — restate prior periods shown</td><td>FIFO → weighted average</td></tr>
+<tr><td><b>Change in accounting estimate</b></td><td><b>Prospective</b> — current and future periods only</td><td>Revise useful life; change in depreciation method (GAAP treats as estimate)</td></tr>
+<tr><td><b>Correction of an error</b></td><td><b>Restate</b> prior periods; adjust opening retained earnings (prior-period adjustment)</td><td>Missed depreciation last year</td></tr>
+<tr><td><b>Change in reporting entity</b></td><td>Retrospective</td><td>Consolidating a newly controlled group</td></tr>
+</tbody></table>
+<div class="ex"><span class="lbl">Worked example — change in estimate (prospective)</span>
+Asset cost 100,000, no salvage, 10-year life, straight-line. After 4 years the remaining life is revised to 3 more years.
+<div class="formula">Book value after 4 years = 100,000 − 4 × 10,000 = 60,000
+New annual depreciation  = 60,000 ÷ 3 = 20,000 (no restatement of past years)</div></div>
+<h4>17.1 Notes and the statement of owners' equity</h4>
+<p>The <b>notes</b> are an integral part of the statements: significant accounting policies (first note), contingencies, subsequent events, commitments, segment information, related-party transactions. <b>Subsequent events</b>: <i>recognised</i> events give more evidence about conditions existing at the balance-sheet date (adjust the statements, e.g. customer bankruptcy that existed at year-end); <i>non-recognised</i> events arise after the date (disclose only, e.g. a fire after year-end). The <b>statement of owners' equity</b> reconciles each equity component — share capital, APIC, retained earnings, treasury stock and AOCI — from opening to closing.</p>
+<p><b>Statement of cash flows disclosures:</b> significant <b>non-cash investing and financing activities</b> (e.g. buying land by issuing shares, converting bonds to stock) are disclosed separately, not in the body; companies using the direct method must also provide the indirect reconciliation; interest and income taxes paid are disclosed.</p>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+Ending receivables by age require an allowance of 9,000. The allowance currently has a credit balance of 2,500. What is bad-debt expense under the aging method?
+<details><summary>Show the answer</summary><p>9,000 − 2,500 = <b>6,500</b>.</p></details></div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+5,000 shares of 8% cumulative preferred, par 50, with one year in arrears. The board declares 50,000. How much goes to common?
+<details><summary>Show the answer</summary><p>Annual preferred = 5,000 × 50 × 8% = 20,000. Preferred gets arrears 20,000 + current 20,000 = 40,000. Common gets <b>10,000</b>.</p></details></div>
 `;
 NOTES.B=`
 <p class="lead"><b>How to read this section.</b> Section B is 20% of the exam — one of the two biggest — and it is <i>heavily</i> computational. This is where most marks are won or lost. Below, every technique is explained from scratch, then shown with full worked numbers, then given to you as an exercise with the answer hidden. If you can reproduce the master-budget chain, the cash budget, high-low, regression prediction, expected value and the learning curve from memory, you have this section.</p>
@@ -2125,6 +2444,123 @@ A firm budgets sales of 8,000 units, wants ending finished-goods inventory of 90
 <p>Production = Sales 8,000 + Ending 900 − Beginning 600 = <b>8,300 units</b>.</p></details>
 </div>
 <div class="callout"><b>How to study Section B:</b> this section is 20% and almost pure calculation. Do full master-budget chains until the two core formulas are automatic. Drill cash budgets with collection/payment lags — they appear almost every exam. Practise high-low, plugging into a regression equation, expected value, and the learning curve. Speed and accuracy here directly lift your score. Verify against the official IMA Learning Outcome Statements before exam day.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="b-x-strat"><span class="num">7</span>Formulating & implementing strategy (deeper)</h3>
+<h4>7.1 Levels of strategy</h4>
+<ul>
+<li><b>Corporate-level</b> — which businesses to be in. <b>Growth</b> (concentration, horizontal integration = buying competitors, vertical integration = buying suppliers [backward] or distributors [forward], related or unrelated diversification), <b>stability</b>, or <b>retrenchment</b> (turnaround, divestment, liquidation).</li>
+<li><b>Business-level</b> — how to compete in one market (Porter's cost leadership, differentiation, focus).</li>
+<li><b>Functional-level</b> — how each function (marketing, operations, finance) supports the business strategy.</li>
+</ul>
+<h4>7.2 Ansoff growth matrix</h4>
+<table><thead><tr><th></th><th>Existing products</th><th>New products</th></tr></thead><tbody>
+<tr><td><b>Existing markets</b></td><td><b>Market penetration</b> (lowest risk)</td><td><b>Product development</b></td></tr>
+<tr><td><b>New markets</b></td><td><b>Market development</b></td><td><b>Diversification</b> (highest risk)</td></tr>
+</tbody></table>
+<h4>7.3 BCG growth-share matrix</h4>
+<table><thead><tr><th>Quadrant</th><th>Market growth / share</th><th>Typical action</th></tr></thead><tbody>
+<tr><td><b>Star</b></td><td>High / High</td><td>Invest to keep leadership</td></tr>
+<tr><td><b>Cash cow</b></td><td>Low / High</td><td>Harvest cash to fund others</td></tr>
+<tr><td><b>Question mark</b></td><td>High / Low</td><td>Invest selectively or exit</td></tr>
+<tr><td><b>Dog</b></td><td>Low / Low</td><td>Divest or minimise</td></tr>
+</tbody></table>
+<h4>7.4 Other planning tools</h4>
+<ul>
+<li><b>Scenario planning</b> — build several plausible futures (e.g. oil at 40 / 80 / 120) and test the strategy against each.</li>
+<li><b>Contingency planning</b> — pre-agreed responses to specific events ("if our largest customer leaves, we will…").</li>
+<li><b>Critical success factors (CSFs)</b> — the few things that must go right; measured with <b>KPIs</b>.</li>
+<li><b>Competitive analysis</b> — understanding competitors' strategies, strengths and likely reactions.</li>
+<li><b>PESTEL</b> — Political, Economic, Social, Technological, Environmental, Legal scan of the macro-environment.</li>
+<li><b>Implementation</b> — strategy fails without structure, resources, leadership, culture and control systems (budgets and the balanced scorecard) aligned to it.</li>
+</ul>
+
+<h3 id="b-x-std"><span class="num">8</span>Establishing standards (deeper)</h3>
+<p>Sources a company can use to set standard costs:</p>
+<ul>
+<li><b>Activity analysis</b> (engineering studies) — detailed study of the steps, time and materials needed. Most accurate, most expensive.</li>
+<li><b>Historical data</b> — past results; cheap, but bakes in old inefficiencies.</li>
+<li><b>Benchmarking</b> — best-practice performance inside or outside the company.</li>
+<li><b>Market expectations & strategic decisions</b> — e.g. <b>target costing</b>: start from the price the market will pay.</li>
+</ul>
+<div class="formula">Target cost = Target (market) price − Required profit margin</div>
+<div class="ex"><span class="lbl">Worked example — target costing</span>
+The market will pay 80 per unit; the company requires a 25% margin on price.
+<div class="formula">Required profit = 80 × 25% = 20
+Target cost     = 80 − 20 = 60 → design and source the product to cost ≤ 60</div></div>
+<p><b>Authoritative standards</b> are set by management/engineers; <b>participative standards</b> involve the people who must meet them (better acceptance). Standards should be reviewed regularly so they stay attainable.</p>
+
+<h3 id="b-x-prob"><span class="num">9</span>Probability, risk and the value of information</h3>
+<h4>9.1 Basic probability rules</h4>
+<div class="formula">Independent events, both happen:  P(A and B) = P(A) × P(B)
+Either happens:                    P(A or B)  = P(A) + P(B) − P(A and B)
+Mutually exclusive (can't both):   P(A or B)  = P(A) + P(B)
+All outcomes' probabilities sum to 1.</div>
+<h4>9.2 Measuring risk: standard deviation & coefficient of variation</h4>
+<div class="ex"><span class="lbl">Worked example — risk of a project</span>
+Profit outcomes: 100 (30%), 200 (40%), 300 (30%).
+<div class="formula">Expected value  = 0.3×100 + 0.4×200 + 0.3×300 = 200
+Variance        = 0.3×(100−200)² + 0.4×(200−200)² + 0.3×(300−200)² = 6,000
+Std deviation   = √6,000 = 77.5
+Coefficient of variation = 77.5 ÷ 200 = 0.39 (risk per unit of return)</div>
+Use the coefficient of variation to compare projects of different size — lower = less risk per unit of expected return.</div>
+<h4>9.3 Decision trees and the expected value of perfect information (EVPI)</h4>
+<div class="ex"><span class="lbl">Worked example — EVPI</span>
+Launch a product? Demand High (60%) → profit 500,000; Low (40%) → loss 200,000. Not launching = 0.
+<div class="formula">EV(launch)       = 0.6 × 500,000 + 0.4 × (−200,000) = 220,000 → best choice
+With perfect information you launch only if demand is High:
+EV with perfect info = 0.6 × 500,000 + 0.4 × 0 = 300,000
+EVPI = 300,000 − 220,000 = 80,000</div>
+EVPI is the <b>maximum</b> you should pay for a perfect forecast (e.g. market research).</div>
+<p>Expected value assumes a <b>risk-neutral</b> decision-maker and is most meaningful for repeated decisions. A <b>payoff table</b> lists actions × states of nature; a <b>decision tree</b> shows the same visually with decision nodes (squares) and chance nodes (circles).</p>
+
+<h3 id="b-x-reg"><span class="num">10</span>Reading regression output</h3>
+<div class="ex"><span class="lbl">Worked example — interpreting output</span>
+<div class="formula">               Coefficient   Std error   t-stat   p-value
+Intercept         8,200        2,050      4.00     0.002
+Machine hours      3.40         0.85      4.00     0.002
+R-squared 0.82    Standard error of estimate 1,100    Observations 24</div>
+<ul style="margin:6px 0">
+<li>Cost equation: <b>y = 8,200 + 3.40x</b>.</li>
+<li><b>t-stat</b> = coefficient ÷ its standard error (3.40 ÷ 0.85 = 4.0). A t-stat above about 2 (p-value below 0.05) means the variable is statistically significant.</li>
+<li><b>R² = 0.82</b> → 82% of the variation in cost is explained by machine hours.</li>
+<li><b>Standard error of the estimate</b> measures typical scatter around the line — smaller is better; used to build confidence intervals for predictions.</li>
+</ul></div>
+<p><b>Assumptions & limits:</b> the relationship is linear within the <b>relevant range</b>; predictions far outside the data are unreliable; correlation is not causation; in <b>multiple regression</b> independent variables should not be highly correlated with each other (<b>multicollinearity</b>). <b>Time-series</b> forecasting looks at trend, seasonal, cyclical and random components; <b>moving averages</b> and <b>exponential smoothing</b> are simple time-series tools.</p>
+
+<h3 id="b-x-lc"><span class="num">11</span>Learning curves — the two models</h3>
+<table><thead><tr><th>Model</th><th>What falls by the % each time output doubles</th></tr></thead><tbody>
+<tr><td><b>Cumulative average-time</b> (Wright) — the usual exam model</td><td>The <b>average</b> time per unit for all units so far</td></tr>
+<tr><td><b>Incremental unit-time</b> (Crawford)</td><td>The time for the <b>last (marginal) unit</b></td></tr>
+</tbody></table>
+<div class="ex"><span class="lbl">Worked example — both models, 80%, first unit 100 hours</span>
+<div class="formula">Cumulative average model:
+Units  Avg/unit  Total time
+  1     100.0      100.0
+  2      80.0      160.0
+  4      64.0      256.0
+  8      51.2      409.6
+
+Incremental unit model (time for the LAST unit):
+Unit 1 = 100 ; Unit 2 = 80 ; Unit 4 = 64 ; Unit 8 = 51.2
+Total time = sum of each unit's time (units 3, 5–7 come from the formula)</div>
+General formula: y = a·x<sup>b</sup>, where b = log(learning rate) ÷ log 2. For 80%, b = −0.322.</div>
+<p><b>Uses:</b> pricing, bidding, labour budgeting, cost estimation for new products. <b>Limits:</b> learning stops once the process is mastered; works best for labour-intensive, repetitive tasks; staff turnover breaks it.</p>
+
+<h3 id="b-x-rep"><span class="num">12</span>Ongoing budgetary reporting & answering budget questions</h3>
+<ul>
+<li>Performance reports compare <b>actual results to a flexible budget</b> (same activity level) so managers see efficiency, not volume effects.</li>
+<li>Reports should be <b>timely</b>, show <b>controllable</b> items for each manager, highlight material variances (management by exception), and lead to corrective action.</li>
+<li>A <b>budget revision</b> is appropriate when assumptions change materially (not merely because results are poor).</li>
+</ul>
+<div class="callout"><b>Exam technique for budget calculations:</b> (1) write the formula before plugging numbers; (2) watch units vs dollars and kg vs units of output; (3) for cash budgets, list collections by month in a small grid; (4) remember depreciation and bad-debt expense are non-cash; (5) check which inventory (finished goods vs raw materials) the question is about.</div>
+<div class="ex"><span class="lbl">Worked example — cash disbursements with a payment lag</span>
+Purchases: May 60,000; June 80,000. Paid 40% in month of purchase, 60% the following month.
+<div class="formula">June payments = 80,000 × 40% + 60,000 × 60% = 32,000 + 36,000 = 68,000
+Accounts payable at 30 June = 80,000 × 60% = 48,000</div></div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+A survey costing 50,000 would give perfect demand information. EV of the best decision without it is 400,000; EV with perfect information is 430,000. Should you buy the survey?
+<details><summary>Show the answer</summary><p>EVPI = 430,000 − 400,000 = 30,000. The survey costs 50,000 &gt; 30,000, so <b>no</b> — it costs more than perfect information is worth.</p></details></div>
 `;
 NOTES.C=`
 <p class="lead"><b>How to read this section.</b> Section C is 20% of the exam and is the most formula-driven part of Part 1. It takes the standards you set in Section B and compares them to what actually happened — that gap is a <b>variance</b>. Below: the logic first, then every variance formula with full worked numbers, then performance measures (ROI, RI, EVA) worked out, then transfer pricing and the balanced scorecard. Learn the variance "map" cold.</p>
@@ -2297,6 +2733,110 @@ A division has operating income of 50,000 and invested capital of 250,000. The r
 <p>ROI = 50,000 / 250,000 = <b>20%</b>. RI = 50,000 − (10% × 250,000) = 50,000 − 25,000 = <b>25,000</b>.</p></details>
 </div>
 <div class="callout"><b>How to study Section C:</b> draw the variance map from memory — DM (price, quantity), DL (rate, efficiency), VOH (spending, efficiency), FOH (budget, volume), sales (price, volume). Remember: price/rate uses actual quantity; efficiency uses standard price; favourable means income goes up. Then drill ROI/RI/EVA and be ready to explain in words why RI beats ROI for investment decisions — a classic exam question. Verify against the official IMA Learning Outcome Statements.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="c-x-mix"><span class="num">7</span>Multiple inputs — materials mix & yield variances</h3>
+<p class="lead">When a product uses several substitutable inputs (chemicals, food ingredients, labour grades), the total quantity variance can be split into a <b>mix</b> variance (did we use a different blend than standard?) and a <b>yield</b> variance (did the total input produce the expected output?).</p>
+<div class="formula">Mix variance   = Σ (Actual qty of each input − Actual TOTAL qty × standard mix %) × standard price
+Yield variance = (Actual total input − Standard total input allowed for actual output)
+                 × standard weighted-average price per unit of input
+Mix + Yield = total quantity (usage) variance</div>
+<div class="ex"><span class="lbl">Worked example — mix and yield</span>
+Standard batch: 60 kg of X at 2 + 40 kg of Y at 5 = 100 kg of input costing 320 (average 3.20/kg), expected to yield 80 kg of output.<br>
+Actual: output 1,600 kg using 1,300 kg of X and 900 kg of Y (2,200 kg total).
+<div class="formula">Standard input allowed for 1,600 kg output = 1,600 ÷ 0.80 = 2,000 kg
+
+MIX VARIANCE (actual total 2,200 kg at standard mix: X 1,320, Y 880)
+X: (1,300 − 1,320) × 2 =   40 F
+Y: (  900 −   880) × 5 =  100 U
+Mix variance          =   60 U  (used relatively more of the expensive input)
+
+YIELD VARIANCE
+(2,200 − 2,000) × 3.20 = 640 U  (needed more input than standard for the output)
+
+CHECK — total quantity variance:
+X: (1,300 − 1,200) × 2 = 200 U ; Y: (900 − 800) × 5 = 500 U → 700 U
+Mix 60 U + Yield 640 U = 700 U ✓</div></div>
+<p>The same logic applies to <b>labour mix and yield</b> when crews combine skilled and unskilled workers at different rates.</p>
+
+<h3 id="c-x-sales"><span class="num">8</span>Sales mix, quantity, market size & market share</h3>
+<p>For a multi-product company the sales volume variance splits into <b>mix</b> and <b>quantity</b>; the quantity variance splits further into <b>market size</b> and <b>market share</b>. All use <b>budgeted contribution margin</b>.</p>
+<div class="formula">Sales volume variance   = Σ (actual units − budget units) × budget CM per unit
+Sales quantity variance = (actual total units − budget total units) × budget weighted-avg CM
+Sales mix variance      = Σ (actual units − actual total × budget mix %) × budget CM per unit
+Market size variance    = (actual market − budget market) × budget share × budget avg CM
+Market share variance   = (actual share − budget share) × actual market × budget avg CM</div>
+<div class="ex"><span class="lbl">Worked example — the full chain</span>
+Budget: P 600 units (CM 10), Q 400 units (CM 20) → 1,000 units, total CM 14,000, average CM 14. Budget market 10,000 units, our share 10%.<br>
+Actual: P 800, Q 400 → 1,200 units. Actual market 15,000 units (our share 8%).
+<div class="formula">VOLUME:   P (800 − 600) × 10 = 2,000 F ; Q (400 − 400) × 20 = 0 → 2,000 F
+QUANTITY: (1,200 − 1,000) × 14 = 2,800 F
+MIX (1,200 at budget mix = P 720, Q 480):
+          P (800 − 720) × 10 = 800 F ; Q (400 − 480) × 20 = 1,600 U → 800 U
+          Check: 2,800 F − 800 U = 2,000 F ✓
+MARKET SIZE:  (15,000 − 10,000) × 10% × 14 = 7,000 F
+MARKET SHARE: (8% − 10%) × 15,000 × 14     = 4,200 U
+          Check: 7,000 F − 4,200 U = 2,800 F = quantity variance ✓</div>
+Story: the market grew a lot (good news, not the manager's doing), but we lost share (bad news, manager's responsibility) and shifted toward the lower-margin product.</div>
+
+<h3 id="c-x-oh"><span class="num">9</span>Overhead — one complete 4/3/2-way example</h3>
+<div class="ex"><span class="lbl">Worked example — overhead analysis</span>
+Standards: 2 direct-labour hours (DLH) per unit; variable OH 3 per DLH; budgeted fixed OH 48,000 based on 12,000 DLH → fixed rate 4 per DLH. Total standard OH rate = 7 per DLH.<br>
+Actual: 5,500 units made (standard hours allowed = 11,000); actual hours 11,500; actual variable OH 36,000; actual fixed OH 49,000.
+<div class="formula">4-WAY
+VOH spending   = 36,000 − 11,500 × 3 (34,500)   = 1,500 U
+VOH efficiency = (11,500 − 11,000) × 3          = 1,500 U
+FOH budget     = 49,000 − 48,000                 = 1,000 U
+FOH volume     = 48,000 − 11,000 × 4 (44,000)    = 4,000 U
+Total                                            = 8,000 U
+
+3-WAY: spending (1,500 + 1,000) 2,500 U | efficiency 1,500 U | volume 4,000 U
+2-WAY: controllable (flexible-budget) 4,000 U | volume 4,000 U
+   controllable = actual 85,000 − flexible budget (11,000 × 3 + 48,000 = 81,000)
+
+CHECK: applied OH = 11,000 × 7 = 77,000; actual 85,000 → under-applied 8,000 ✓</div></div>
+<div class="callout"><b>Memory aid:</b> four "money" amounts in a row — <b>Actual</b> | <b>AH × std rate</b> | <b>SH × std rate (flexible budget)</b> | <b>Applied</b>. Differences between neighbours give spending, efficiency, and (for fixed OH, budget vs applied) volume.</div>
+
+<h3 id="c-x-inter"><span class="num">10</span>Interpreting variances & who is responsible</h3>
+<table><thead><tr><th>Variance</th><th>Usually responsible</th><th>Possible causes</th></tr></thead><tbody>
+<tr><td>Materials price</td><td>Purchasing</td><td>Market prices, rush orders, quality grade, quantity discounts lost</td></tr>
+<tr><td>Materials usage</td><td>Production</td><td>Waste, poor-quality material, untrained staff, machine problems</td></tr>
+<tr><td>Labour rate</td><td>HR / production</td><td>Overtime premiums, using higher-grade workers, pay rises</td></tr>
+<tr><td>Labour efficiency</td><td>Production</td><td>Poor supervision, bad materials, machine breakdowns, learning effects</td></tr>
+<tr><td>FOH volume</td><td>Senior management / sales</td><td>Lower demand, capacity decisions — not a spending issue</td></tr>
+</tbody></table>
+<p><b>Variances interact:</b> buying cheaper, lower-grade material gives a <b>favourable price</b> variance but may cause <b>unfavourable usage</b> and <b>labour efficiency</b> variances. Always look at variances together before blaming one department. Investigate when a variance is <b>material</b>, <b>recurring</b>, <b>controllable</b> and the expected benefit exceeds the cost of investigating.</p>
+
+<h3 id="c-x-cis"><span class="num">11</span>Contribution income statement for segment evaluation</h3>
+<div class="ex"><span class="lbl">Worked example — evaluating a segment and its manager</span>
+<div class="formula">Sales                                   500,000
+− Variable costs                       (300,000)
+= Contribution margin                    200,000
+− Controllable fixed costs (manager)    (60,000)
+= CONTROLLABLE MARGIN                    140,000  ← judge the MANAGER on this
+− Traceable fixed costs not controllable by manager (40,000)
+= SEGMENT MARGIN                         100,000  ← judge the SEGMENT on this
+− Allocated common costs                (30,000)  ← ignore for decisions
+= Segment profit after allocation         70,000</div>
+If the segment were closed, the company would lose its 100,000 segment margin (the common 30,000 would remain), so it should normally be kept.</div>
+
+<h3 id="c-x-perf"><span class="num">12</span>Multiple performance measures — pitfalls & choices</h3>
+<ul>
+<li><b>Defining invested capital:</b> total assets, total assets employed (excluding idle assets), total assets less current liabilities, or equity. Use what the manager controls.</li>
+<li><b>Net book value vs gross book value:</b> with net book value, ROI <b>rises automatically</b> as assets age and depreciate — discouraging replacement of old equipment. Gross book value avoids this but ignores wear.</li>
+<li><b>Short-termism:</b> managers may cut R&D, training or maintenance to boost this year's ROI — balanced scorecard and non-financial KPIs counter this.</li>
+<li><b>Comparing divisions</b> in different countries — currency, inflation and tax differences distort comparison; use local-currency budgets and controllable measures.</li>
+<li><b>Non-financial measures:</b> quality (defect rate), delivery (on-time %), customer satisfaction, employee turnover — often <b>leading indicators</b> of future financial results.</li>
+</ul>
+<div class="ex"><span class="lbl">Worked example — ROI rising with asset age (net book value)</span>
+Asset cost 1,000,000; 5-year life; operating income constant at 150,000.
+<div class="formula">Year 1 average NBV ≈ 900,000 → ROI ≈ 16.7%
+Year 3 average NBV ≈ 500,000 → ROI = 30.0%
+Year 5 average NBV ≈ 100,000 → ROI = 150%
+Same income, same asset — ROI looks better only because the asset got older.</div></div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+Standard input: 70% A at 4/kg and 30% B at 10/kg (avg 5.80/kg). Actual total input 1,000 kg: A 650 kg, B 350 kg. What is the mix variance?
+<details><summary>Show the answer</summary><p>At standard mix: A 700, B 300. A: (650 − 700) × 4 = 200 F. B: (350 − 300) × 10 = 500 U. Mix variance = <b>300 U</b>.</p></details></div>
 `;
 NOTES.D=`
 <p class="lead"><b>How to read this section.</b> Section D is 15% and it is the engine room — the costs you learn to measure here become the inputs to budgeting (B) and variances (C). Everything below is built from scratch with worked numbers: cost behaviour, job-order and process costing (equivalent units, both methods), activity-based costing, support-department allocation (direct, step-down, reciprocal), absorption vs variable costing, joint costing, the theory of constraints, and the cost of quality.</p>
@@ -2476,6 +3016,144 @@ A firm produced 5,000 units and sold 4,500. Fixed manufacturing overhead is 8 pe
 <p>Inventory rose by 5,000 − 4,500 = 500 units. Deferred fixed cost = 500 × 8 = 4,000. Absorption income is <b>higher by 4,000</b> (production exceeded sales).</p></details>
 </div>
 <div class="callout"><b>How to study Section D:</b> the calculation hot-spots are equivalent units (do weighted-average and FIFO), the absorption-vs-variable income difference, support-department allocation (direct / step-down / reciprocal), and joint-cost NRV allocation. Conceptually nail ABC's rationale, TOC throughput, and the four cost-of-quality categories. Verify against the official IMA Learning Outcome Statements.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="d-x-cogm"><span class="num">8</span>Cost of goods manufactured & sold — the full statement</h3>
+<p class="lead">A manufacturer has three inventories: raw materials, work-in-process (WIP) and finished goods. Costs flow through them in order. The exam often gives you balances and asks for one missing figure — learn the chain and you can solve any of them.</p>
+<div class="ex"><span class="lbl">Worked example — COGM and COGS</span>
+<div class="formula">Beginning raw materials                    10,000
++ Purchases of raw materials               60,000
+− Ending raw materials                    (12,000)
+= Direct materials used                    58,000
++ Direct labour                            40,000
++ Manufacturing overhead (applied)         50,000
+= Total manufacturing costs (this period) 148,000
++ Beginning WIP                            20,000
+− Ending WIP                              (18,000)
+= COST OF GOODS MANUFACTURED              150,000
++ Beginning finished goods                 30,000
+− Ending finished goods                   (25,000)
+= COST OF GOODS SOLD                      155,000</div></div>
+<div class="callout"><b>Common trap:</b> "total manufacturing costs" means costs added <i>this period</i>; "cost of goods manufactured" means goods <i>completed</i> this period. The WIP adjustment is the difference.</div>
+<h4>8.1 Actual, normal and standard costing</h4>
+<table><thead><tr><th>System</th><th>Direct materials & labour</th><th>Overhead</th></tr></thead><tbody>
+<tr><td><b>Actual costing</b></td><td>Actual</td><td>Actual (only known at period end)</td></tr>
+<tr><td><b>Normal costing</b></td><td>Actual</td><td>Actual quantity of base × <b>predetermined</b> rate</td></tr>
+<tr><td><b>Standard costing</b></td><td>Standard qty × standard price</td><td>Standard qty of base × standard rate</td></tr>
+</tbody></table>
+
+<h3 id="d-x-joint"><span class="num">9</span>Joint products & byproducts — more methods</h3>
+<div class="ex"><span class="lbl">Worked example — physical units vs sales value at split-off</span>
+Joint cost 60,000. Product A: 2,000 units, sells at split-off for 30. Product B: 4,000 units, sells at split-off for 10.
+<div class="formula">PHYSICAL UNITS (6,000 units)
+A = 60,000 × 2,000/6,000 = 20,000 ; B = 60,000 × 4,000/6,000 = 40,000
+
+SALES VALUE AT SPLIT-OFF (A 60,000 + B 40,000 = 100,000)
+A = 60,000 × 60% = 36,000 ; B = 60,000 × 40% = 24,000</div>
+Physical units can make a low-value product look unprofitable (B is allocated 40,000 of cost against 40,000 of sales); sales value allocates cost in line with ability to bear it.</div>
+<div class="ex"><span class="lbl">Worked example — sell at split-off or process further?</span>
+B can be processed further for 15,000 and then sold for 14 instead of 10.
+<div class="formula">Incremental revenue = 4,000 × (14 − 10) = 16,000
+Incremental cost    =                     15,000
+Process further → profit rises by 1,000 (joint cost is irrelevant)</div></div>
+<h4>9.1 Byproduct accounting — two methods</h4>
+<ul>
+<li><b>Production (NRV) method</b> — recognise the byproduct's NRV when <b>produced</b>; deduct it from joint cost; byproduct inventory carried at NRV. More conceptually correct.</li>
+<li><b>Sales method</b> — recognise byproduct income only when <b>sold</b> (as other income or a reduction of COGS); no inventory value for the byproduct. Simpler, used when amounts are immaterial.</li>
+</ul>
+
+<h3 id="d-x-shared"><span class="num">10</span>Shared service costs — single-rate vs dual-rate</h3>
+<p>When a service department (IT, maintenance) charges users, the method shapes behaviour:</p>
+<ul>
+<li><b>Single-rate</b> — one rate per unit of service covering fixed + variable costs. Simple, but users treat fixed cost as if it were variable.</li>
+<li><b>Dual-rate</b> — <b>fixed costs</b> allocated on <b>budgeted / capacity</b> usage (what each user asked the department to be sized for); <b>variable costs</b> on <b>actual</b> usage.</li>
+<li>Charge at <b>budgeted rates, not actual</b>, so the service department's inefficiencies are not passed on to users.</li>
+</ul>
+<div class="ex"><span class="lbl">Worked example — single vs dual rate</span>
+IT department: fixed cost 100,000; variable cost 5 per hour. Dept X budgeted 6,000 hours, used 5,000. Dept Y budgeted 4,000, used 5,000.
+<div class="formula">DUAL-RATE
+Fixed:    X 100,000 × 60% = 60,000 ; Y 100,000 × 40% = 40,000
+Variable: X 5,000 × 5     = 25,000 ; Y 5,000 × 5     = 25,000
+Total:    X 85,000 ; Y 65,000
+
+SINGLE-RATE (on actual hours)
+Total cost = 100,000 + 10,000 × 5 = 150,000 → 15 per hour
+X 75,000 ; Y 75,000</div>
+Under single-rate, X's charge fell only because Y used more — the dual-rate method keeps each department responsible for the capacity it requested.</div>
+
+<h3 id="d-x-recip"><span class="num">11</span>Reciprocal method — full algebra</h3>
+<div class="ex"><span class="lbl">Worked example — reciprocal allocation</span>
+S1 costs 20,000 and gives 20% to S2, 40% to P1, 40% to P2. S2 costs 30,000 and gives 10% to S1, 50% to P1, 40% to P2.
+<div class="formula">Set up equations (total cost of each service dept incl. what it receives):
+S1 = 20,000 + 0.10 × S2
+S2 = 30,000 + 0.20 × S1
+
+Substitute: S1 = 20,000 + 0.10 × (30,000 + 0.20 S1)
+            S1 = 23,000 + 0.02 S1  →  0.98 S1 = 23,000  →  S1 = 23,469
+            S2 = 30,000 + 0.20 × 23,469 = 34,694
+
+Allocate to production departments:
+P1 = 0.40 × 23,469 + 0.50 × 34,694 = 9,388 + 17,347 = 26,735
+P2 = 0.40 × 23,469 + 0.40 × 34,694 = 9,388 + 13,878 = 23,265
+Total = 50,000 ✓ (all service cost ends up in production)</div></div>
+<p>The direct method would ignore the 20% and 10% cross-services; step-down would recognise only one of them (depending on order). Reciprocal recognises both.</p>
+
+<h3 id="d-x-cap"><span class="num">12</span>Capacity levels & their effect on cost</h3>
+<table><thead><tr><th>Capacity concept</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><b>Theoretical (ideal)</b></td><td>Maximum output with no downtime at all — unattainable</td></tr>
+<tr><td><b>Practical</b></td><td>Theoretical minus unavoidable downtime (maintenance, holidays)</td></tr>
+<tr><td><b>Normal</b></td><td>Average expected use over several years (smooths seasons/cycles)</td></tr>
+<tr><td><b>Master-budget</b></td><td>Expected use for the coming year</td></tr>
+</tbody></table>
+<div class="ex"><span class="lbl">Worked example — the denominator changes the rate</span>
+Fixed overhead 120,000.
+<div class="formula">Theoretical 30,000 hrs → 4.00 per hour
+Practical   24,000 hrs → 5.00 per hour
+Normal      20,000 hrs → 6.00 per hour
+Master budget 16,000 hrs → 7.50 per hour</div>
+Using <b>practical capacity</b> gives a lower product cost and reveals the <b>cost of unused capacity</b> (as a volume variance) instead of loading it onto products — which can trigger a "death spiral" of rising prices and falling demand.</div>
+
+<h3 id="d-x-mrp"><span class="num">13</span>MRP, MRP II, ERP, JIT & outsourcing</h3>
+<ul>
+<li><b>MRP (materials requirements planning)</b> — a <b>push</b> system: from the master production schedule, bill of materials and inventory records, it calculates what materials to order and when.</li>
+<li><b>MRP II (manufacturing resource planning)</b> — extends MRP to all manufacturing resources: capacity, labour, finance.</li>
+<li><b>ERP</b> — extends further to integrate the entire organisation on one database (see Section F).</li>
+<li><b>JIT / kanban</b> — a <b>pull</b> system: production is triggered by actual demand; kanban cards signal when to replenish. Enables <b>backflush costing</b> (costs recorded at completion or sale, skipping detailed WIP tracking).</li>
+<li><b>Outsourcing</b> — buying a function from an external provider: may cut cost and focus the business on core competencies, but adds risks to quality, control, confidentiality and supplier dependence.</li>
+</ul>
+
+<h3 id="d-x-proc"><span class="num">14</span>Process analysis — cycle time & efficiency</h3>
+<div class="formula">Manufacturing cycle time = processing + inspection + move + queue (wait) time
+Manufacturing cycle efficiency (MCE) = value-added (processing) time ÷ total cycle time</div>
+<div class="ex"><span class="lbl">Worked example — MCE</span>
+Processing 4 hours, inspection 1, moving 2, waiting 13.
+<div class="formula">Total cycle time = 4 + 1 + 2 + 13 = 20 hours
+MCE = 4 ÷ 20 = 20% → 80% of the time adds no value</div>
+Improvement targets the non-value-added parts: queue time (better scheduling), moves (better layout), inspection (build quality in).</div>
+<p><b>Process reengineering</b> radically redesigns a process; <b>process mapping</b> (flowcharts) exposes bottlenecks and duplication; <b>benchmarking</b> sets the improvement target.</p>
+
+<h3 id="d-x-qual"><span class="num">15</span>Quality management — frameworks & tools</h3>
+<ul>
+<li><b>Total Quality Management (TQM)</b> — quality is everyone's job; customer focus, continuous improvement, employee empowerment, fact-based decisions.</li>
+<li><b>Six Sigma</b> — reduce variation to about <b>3.4 defects per million opportunities</b>, using <b>DMAIC</b>: Define, Measure, Analyse, Improve, Control. <b>Lean Six Sigma</b> combines waste removal with variation reduction.</li>
+<li><b>PDCA (Deming cycle)</b> — Plan, Do, Check, Act — repeated continuously.</li>
+<li><b>ISO 9000</b> — international standards for quality management systems (certification shows a documented, followed system — not that products are perfect).</li>
+<li><b>Kaizen</b> — small continuous improvements; <b>poka-yoke</b> — mistake-proofing devices.</li>
+</ul>
+<table><thead><tr><th>Tool</th><th>Use</th></tr></thead><tbody>
+<tr><td><b>Pareto chart</b></td><td>Rank problem causes — the "vital few" (≈80/20)</td></tr>
+<tr><td><b>Cause-and-effect (fishbone / Ishikawa)</b></td><td>Brainstorm root causes by category (people, methods, machines, materials…)</td></tr>
+<tr><td><b>Control chart</b></td><td>Statistical process control — spot when a process drifts outside control limits</td></tr>
+<tr><td><b>Histogram / flowchart</b></td><td>Show distribution of results / map the process steps</td></tr>
+</tbody></table>
+<div class="ex"><span class="lbl">Worked example — cost-of-quality report</span>
+<div class="formula">Prevention 20,000 + Appraisal 30,000          = Conformance     50,000
+Internal failure 40,000 + External failure 60,000 = Non-conformance 100,000
+Total cost of quality = 150,000 → 15% of sales of 1,000,000</div>
+Two-thirds of quality cost is failure — a signal to invest more in prevention.</div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+DM used 45,000; DL 30,000; overhead 35,000; beginning WIP 12,000; ending WIP 10,000. What is cost of goods manufactured?
+<details><summary>Show the answer</summary><p>Total manufacturing costs = 110,000; + 12,000 − 10,000 = <b>112,000</b>.</p></details></div>
 `;
 NOTES.E=`
 <p class="lead"><b>How to read this section.</b> Section E is 15% and mostly conceptual — frameworks, definitions and scenarios, very few calculations. The core is the COSO framework, Sarbanes-Oxley, control types, and systems/security controls. It overlaps with auditing, but the CMA angle is the <i>company's own</i> control system. Learn COSO's five components and SOX's key sections cold — they are near-guaranteed marks.</p>
@@ -2591,6 +3269,121 @@ An external auditor finds the financial statements fairly presented "except for"
 <p>A <b>qualified opinion</b> — fairly presented "except for" a specific, material (but not pervasive) issue. If the problem were pervasive, it would be an <b>adverse</b> opinion.</p></details>
 </div>
 <div class="callout"><b>How to study Section E:</b> memorise the five COSO components (CRIME) and the three SOX sections (302, 404, 906) — those are almost free marks. Be able to classify any control as preventive/detective/corrective, spot a segregation-of-duties failure, and name the four audit opinions. Verify against the official IMA Learning Outcome Statements.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="e-x-gov"><span class="num">9</span>Governance principles & the governance hierarchy</h3>
+<p class="lead">Corporate governance answers: who directs the company, who watches them, and how are they held accountable? Think of it as layers, each overseeing the one below.</p>
+<table><thead><tr><th>Layer</th><th>Role</th></tr></thead><tbody>
+<tr><td><b>Shareholders</b></td><td>Own the company; elect the board; vote on major matters</td></tr>
+<tr><td><b>Board of directors</b></td><td>Sets strategy and risk appetite; hires, pays and oversees the CEO; owes fiduciary duties (care and loyalty) to shareholders</td></tr>
+<tr><td><b>Board committees</b></td><td><b>Audit</b> (reporting, internal control, external & internal audit — independent members, at least one financial expert), <b>compensation</b> (executive pay), <b>nominating/governance</b> (board membership)</td></tr>
+<tr><td><b>Senior management (CEO, CFO)</b></td><td>Run the business; design and operate internal control</td></tr>
+<tr><td><b>Internal audit</b></td><td>Independent assurance on risk, control and governance — reports functionally to the <b>audit committee</b>, administratively to management</td></tr>
+<tr><td><b>External auditor</b></td><td>Independent opinion on the financial statements (and ICFR for large public companies)</td></tr>
+</tbody></table>
+<p><b>Principles of good governance:</b> accountability, transparency, fairness to all shareholders, responsibility, board independence, separation of the chair and CEO roles (or a lead independent director), and a strong ethical culture. Governance mitigates the <b>agency problem</b> — managers (agents) not acting in owners' (principals') interests.</p>
+
+<h3 id="e-x-17"><span class="num">10</span>The 17 COSO principles</h3>
+<table><thead><tr><th>Component</th><th>Principles</th></tr></thead><tbody>
+<tr><td><b>Control environment</b></td><td>1 Commitment to integrity and ethical values · 2 Board independence and oversight · 3 Structures, reporting lines and authority · 4 Commitment to competence · 5 Accountability</td></tr>
+<tr><td><b>Risk assessment</b></td><td>6 Specifies suitable objectives · 7 Identifies and analyses risks · 8 Assesses fraud risk · 9 Identifies and analyses significant change</td></tr>
+<tr><td><b>Control activities</b></td><td>10 Selects and develops control activities · 11 Selects and develops general controls over technology · 12 Deploys through policies and procedures</td></tr>
+<tr><td><b>Information & communication</b></td><td>13 Uses relevant, quality information · 14 Communicates internally · 15 Communicates externally</td></tr>
+<tr><td><b>Monitoring activities</b></td><td>16 Conducts ongoing and/or separate evaluations · 17 Evaluates and communicates deficiencies</td></tr>
+</tbody></table>
+<p>For effective internal control, all five components and the relevant principles must be <b>present and functioning</b>, and operating together.</p>
+<h4>10.1 Fraud risk — the fraud triangle</h4>
+<ul><li><b>Pressure / incentive</b> (debts, targets) · <b>Opportunity</b> (weak controls) · <b>Rationalisation</b> ("I'll pay it back").</li>
+<li>Controls mainly attack <b>opportunity</b>; ethical culture and tone at the top attack <b>rationalisation</b>.</li></ul>
+
+<h3 id="e-x-tx"><span class="num">11</span>Transaction & safeguarding controls</h3>
+<h4>11.1 Transaction controls</h4>
+<ul>
+<li><b>Proper authorisation</b> — general (standing policies, e.g. price lists) and specific (one-off approvals above a limit).</li>
+<li><b>Documents and records</b> — <b>pre-numbered</b> forms so missing items can be detected; designed for easy, accurate completion.</li>
+<li><b>Independent checks / verification</b> — someone other than the preparer reviews; reconciliations (bank, subledger to GL).</li>
+<li><b>Three-way match</b> in purchasing — purchase order, receiving report and supplier invoice agree before payment.</li>
+</ul>
+<h4>11.2 Safeguarding controls</h4>
+<ul>
+<li><b>Physical controls</b> — locks, safes, restricted areas, cameras; limit access to assets and records.</li>
+<li><b>Periodic counts</b> compared with records (inventory counts, cash counts).</li>
+<li><b>Insurance</b> and <b>fidelity bonding</b> of employees who handle cash.</li>
+<li><b>Mandatory vacations and job rotation</b> — frauds that need daily concealment get exposed when someone else does the job.</li>
+</ul>
+<h4>11.3 Deficiency levels</h4>
+<table><thead><tr><th>Level</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><b>Control deficiency</b></td><td>A control doesn't allow timely prevention/detection of misstatements</td></tr>
+<tr><td><b>Significant deficiency</b></td><td>Less severe than a material weakness but important enough to merit the audit committee's attention</td></tr>
+<tr><td><b>Material weakness</b></td><td>A reasonable possibility that a <b>material</b> misstatement won't be prevented or detected on time. Any material weakness → ICFR is <b>not effective</b> → adverse opinion on ICFR</td></tr>
+</tbody></table>
+
+<h3 id="e-x-fcpa"><span class="num">12</span>Foreign Corrupt Practices Act (FCPA) & more of SOX</h3>
+<h4>12.1 FCPA (U.S., 1977)</h4>
+<ul>
+<li><b>Anti-bribery provisions</b> — prohibit paying (or offering) anything of value to a <b>foreign official</b> to obtain or keep business. Apply to U.S. companies and persons, SEC issuers, and anyone acting in the U.S. A narrow exception exists for small <b>facilitating ("grease") payments</b> for routine government actions (e.g. processing a visa) — not for decisions to award business.</li>
+<li><b>Accounting provisions</b> — apply to SEC issuers (bribery or not): keep <b>books and records</b> in reasonable detail that accurately reflect transactions, and maintain a <b>system of internal accounting controls</b>.</li>
+<li>Penalties include large fines for companies and fines and prison for individuals; companies cannot pay individuals' fines.</li>
+</ul>
+<h4>12.2 Other SOX sections worth knowing</h4>
+<table><thead><tr><th>Section</th><th>What it does</th></tr></thead><tbody>
+<tr><td>101</td><td>Establishes the PCAOB</td></tr>
+<tr><td>201</td><td>Prohibits auditors from providing certain non-audit services (e.g. bookkeeping, systems design, internal audit outsourcing) to audit clients</td></tr>
+<tr><td>203</td><td>Lead and reviewing audit partners rotate every 5 years</td></tr>
+<tr><td>301</td><td>Audit committee: independent members, responsible for appointing and overseeing the auditor, whistle-blower procedures</td></tr>
+<tr><td>302</td><td>CEO/CFO certify reports and disclosure controls</td></tr>
+<tr><td>404</td><td>Management's ICFR assessment; auditor attestation for accelerated filers</td></tr>
+<tr><td>409</td><td>Real-time disclosure of material changes</td></tr>
+<tr><td>802</td><td>Criminal penalties for destroying, altering or falsifying records</td></tr>
+<tr><td>806</td><td>Whistle-blower protection</td></tr>
+<tr><td>906</td><td>Criminal penalties for knowingly false certification</td></tr>
+</tbody></table>
+
+<h3 id="e-x-audit"><span class="num">13</span>Audit reports — extra paragraphs & ICFR opinions</h3>
+<ul>
+<li><b>Emphasis-of-matter</b> paragraph — draws attention to something properly disclosed (doesn't modify the opinion).</li>
+<li><b>Going-concern</b> — if there is substantial doubt about the entity's ability to continue for a reasonable period, the auditor adds an explanatory paragraph.</li>
+<li><b>Critical audit matters (CAMs)</b> — for public companies, matters communicated to the audit committee involving especially challenging judgement.</li>
+<li><b>ICFR opinion</b> — unqualified if effective; <b>adverse</b> if any material weakness exists — even when the financial statements themselves receive a clean opinion.</li>
+</ul>
+
+<h3 id="e-x-sys"><span class="num">14</span>System controls in detail</h3>
+<h4>14.1 Input (edit) controls — know the names</h4>
+<table><thead><tr><th>Control</th><th>What it checks</th></tr></thead><tbody>
+<tr><td>Field (format) check</td><td>Correct data type (numbers in an amount field)</td></tr>
+<tr><td>Limit / range check</td><td>Value within a sensible limit (hours ≤ 60/week)</td></tr>
+<tr><td>Validity check</td><td>Value exists in a master file (valid customer number)</td></tr>
+<tr><td>Check digit</td><td>An extra digit computed from the others catches transposed numbers</td></tr>
+<tr><td>Completeness check</td><td>All required fields entered</td></tr>
+<tr><td>Sequence check</td><td>Batch in correct order; no gaps or duplicates in numbering</td></tr>
+<tr><td>Reasonableness check</td><td>Value logical compared with other data</td></tr>
+<tr><td><b>Batch totals</b>: record count, financial (dollar) total, <b>hash total</b></td><td>Totals before and after processing agree. A hash total is a meaningless sum (e.g. of account numbers) used only for control</td></tr>
+</tbody></table>
+<h4>14.2 Processing, output & general controls</h4>
+<ul>
+<li><b>Processing</b> — run-to-run totals, reconciling master file totals, error logs, concurrency controls.</li>
+<li><b>Output</b> — reconcile output to input, distribution lists, secure disposal (shredding) of sensitive reports.</li>
+<li><b>IT general controls</b> — access security, <b>program change management</b> (develop, test, approve, then migrate — developers should not move their own code to production), IT operations, segregation of duties within IT (systems analysts, programmers, operators, database administrator).</li>
+</ul>
+<h4>14.3 Encryption & internet security</h4>
+<ul>
+<li><b>Symmetric encryption</b> — one shared key encrypts and decrypts (fast; key distribution is the problem).</li>
+<li><b>Asymmetric (public-key) encryption</b> — a public key encrypts, the matching private key decrypts. <b>Digital signatures</b> use the sender's private key to sign; anyone verifies with the public key — proving origin and integrity. <b>Certificate authorities</b> vouch for who owns a public key.</li>
+<li><b>Firewalls</b> filter traffic; <b>VPNs</b> create encrypted tunnels; <b>intrusion detection/prevention systems</b> monitor for attacks; <b>multi-factor authentication</b> combines something you know, have and are.</li>
+</ul>
+<h4>14.4 Business continuity metrics</h4>
+<ul>
+<li><b>Recovery time objective (RTO)</b> — how quickly a system must be back up.</li>
+<li><b>Recovery point objective (RPO)</b> — how much data loss (time since last backup) is acceptable.</li>
+<li>Tight RTO/RPO → hot site, real-time replication (expensive); looser → warm or cold site, daily backups.</li>
+<li>Plans must be <b>tested</b> regularly (walk-throughs, simulations) — an untested plan is not a plan.</li>
+</ul>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+A payroll clerk enters 400 hours for one employee in a single week and the system rejects it. Which input control worked?
+<details><summary>Show the answer</summary><p>A <b>limit (range) check</b> — the value exceeded the maximum allowed hours.</p></details></div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+A company's financial statements are fairly presented, but the auditor finds one material weakness in ICFR. What opinions are issued?
+<details><summary>Show the answer</summary><p>An <b>unqualified</b> opinion on the financial statements and an <b>adverse</b> opinion on internal control over financial reporting.</p></details></div>
 `;
 NOTES.F=`
 <p class="lead"><b>How to read this section.</b> Section F is 15% and is definition-driven, with almost no calculations — which makes it high-yield if you learn the terms precisely. It covers information systems, data governance, technology transformation, and data analytics. The single most testable idea is the <b>four types of analytics</b>. Learn the vocabulary exactly and these become fast, reliable marks.</p>
@@ -2695,6 +3488,128 @@ A manager asks, "Based on last quarter's data, what will sales likely be next qu
 <p>"What will sales likely be" = <b>predictive</b>; "what should we do to hit target" = <b>prescriptive</b>.</p></details>
 </div>
 <div class="callout"><b>How to study Section F:</b> this is fast, high-yield vocabulary. Lock the four analytics types with their guiding questions, structured-vs-unstructured and warehouse-vs-lake, the emerging-tech list (RPA, AI/ML, cloud, blockchain), and chart-to-message matching. Do not neglect the "easy" section — these are quick marks. Verify against the official IMA Learning Outcome Statements.</div>
+
+<div class="callout" style="margin-top:34px;border-left-color:var(--gold);background:var(--gold-soft)"><b>Extended coverage</b> — the sections below go deeper into every remaining syllabus unit, with more worked calculations and exam traps.</div>
+<h3 id="f-x-cycles"><span class="num">6</span>Transaction cycles</h3>
+<p class="lead">Every business repeats the same few loops of activity. Accounting systems are built around these <b>transaction cycles</b>; knowing their steps, documents and key controls answers many Section E and F questions.</p>
+<table><thead><tr><th>Cycle</th><th>Main steps</th><th>Key documents</th><th>Key controls</th></tr></thead><tbody>
+<tr><td><b>Revenue (order-to-cash)</b></td><td>Sales order → credit approval → shipping → billing → cash collection</td><td>Sales order, picking/shipping document, invoice, remittance advice</td><td>Credit limits, pre-numbered invoices, matching shipping to billing, segregating cash receipts from AR recording</td></tr>
+<tr><td><b>Expenditure (procure-to-pay)</b></td><td>Requisition → purchase order → receiving → invoice → payment</td><td>Purchase requisition, PO, receiving report, supplier invoice, cheque/payment</td><td>Approved vendor list, <b>three-way match</b>, separating purchasing, receiving and payment</td></tr>
+<tr><td><b>Production (conversion)</b></td><td>Planning → materials issue → production → finished goods</td><td>Bill of materials, production order, materials requisition, move tickets</td><td>Authorised production orders, inventory counts, standard costs vs actual</td></tr>
+<tr><td><b>Human resources / payroll</b></td><td>Hiring → timekeeping → payroll processing → payment</td><td>Personnel file, time cards, payroll register</td><td>HR (adds employees) separate from payroll (pays them); review for "ghost" employees</td></tr>
+<tr><td><b>Financing</b></td><td>Raising and repaying debt and equity, paying dividends</td><td>Board minutes, loan agreements, share certificates</td><td>Board authorisation, treasury segregation</td></tr>
+<tr><td><b>General ledger & reporting</b></td><td>Summarise all cycles → journal entries → close → statements</td><td>Journal vouchers, trial balance</td><td>Approval of manual journal entries, reconciliations, audit trail</td></tr>
+</tbody></table>
+
+<h3 id="f-x-db"><span class="num">7</span>Databases</h3>
+<h4>7.1 Building blocks</h4>
+<ul>
+<li><b>Field</b> (attribute, e.g. customer name) → <b>record</b> (row: one customer) → <b>table/file</b> (all customers) → <b>database</b> (related tables).</li>
+<li><b>Relational database</b> — data stored in tables linked by keys. Each table has a <b>primary key</b> (unique identifier, e.g. CustomerID). A <b>foreign key</b> is a field in one table that refers to the primary key of another (CustomerID in the Invoices table).</li>
+<li><b>Normalisation</b> — organising tables to remove redundancy so each fact is stored once, avoiding update/insert/delete anomalies.</li>
+<li><b>DBMS</b> — software that manages the database, controls access and keeps integrity. The <b>data dictionary</b> describes every field (name, type, length, owner). The <b>database administrator (DBA)</b> manages structure and security.</li>
+</ul>
+<h4>7.2 SQL in one minute</h4>
+<div class="formula">SELECT CustomerName, Amount
+FROM Invoices
+WHERE Amount &gt; 10000
+ORDER BY Amount DESC;</div>
+<p>SQL (Structured Query Language) retrieves and manipulates data: <b>SELECT</b> chooses fields, <b>FROM</b> chooses tables, <b>WHERE</b> filters rows, <b>JOIN</b> links tables on keys, <b>GROUP BY</b> summarises. <b>Data definition language</b> creates structures; <b>data manipulation language</b> changes data.</p>
+<h4>7.3 Warehouse, mart, lake & EPM</h4>
+<ul>
+<li><b>Data warehouse</b> — integrated, cleaned, historical data from many systems, optimised for analysis (not daily transactions).</li>
+<li><b>Data mart</b> — a smaller subset of the warehouse for one department (e.g. a sales mart).</li>
+<li><b>Data lake</b> — raw data of all types in native format.</li>
+<li><b>EPM / CPM</b> — enterprise performance management software for planning, budgeting, forecasting, consolidation and reporting on top of these data sources.</li>
+<li><b>OLTP vs OLAP</b> — online <i>transaction</i> processing runs daily operations; online <i>analytical</i> processing slices data in multiple dimensions ("data cubes") for analysis.</li>
+</ul>
+
+<h3 id="f-x-rec"><span class="num">8</span>Records management</h3>
+<p>Records management applies the data life cycle to business records: define <b>retention schedules</b> (keep tax and audit records for the legally required period), store securely with backups, control access, and <b>destroy</b> securely when retention ends — unless a <b>legal hold</b> (litigation, investigation) suspends destruction. Destroying records under legal hold can be a crime (SOX §802).</p>
+
+<h3 id="f-x-cyber"><span class="num">9</span>Cyberattacks</h3>
+<table><thead><tr><th>Attack</th><th>What happens</th></tr></thead><tbody>
+<tr><td><b>Phishing</b> / <b>spear phishing</b></td><td>Fake messages trick users into giving credentials or clicking malware; spear phishing targets specific people (often finance staff)</td></tr>
+<tr><td><b>Business email compromise</b></td><td>Fake "CEO" or "supplier" email requests an urgent payment or bank-detail change</td></tr>
+<tr><td><b>Malware</b>: virus, worm, Trojan horse, spyware</td><td>Virus attaches to files; worm self-replicates across networks; Trojan disguises itself as legitimate software</td></tr>
+<tr><td><b>Ransomware</b></td><td>Encrypts data and demands payment for the key</td></tr>
+<tr><td><b>Denial of service (DoS / DDoS)</b></td><td>Floods a system with traffic so legitimate users can't access it</td></tr>
+<tr><td><b>Man-in-the-middle</b></td><td>Intercepts communication between two parties</td></tr>
+<tr><td><b>SQL injection</b></td><td>Malicious code entered in input fields manipulates the database</td></tr>
+<tr><td><b>Password attacks</b> (brute force, credential stuffing)</td><td>Guessing or reusing stolen passwords</td></tr>
+<tr><td><b>Social engineering</b>, <b>insider threats</b>, <b>zero-day exploits</b></td><td>Manipulating people; misuse by employees; attacks on unknown, unpatched flaws</td></tr>
+</tbody></table>
+<h4>9.1 Defences</h4>
+<ul>
+<li><b>People</b> — security-awareness training, phishing simulations, call-back verification for any bank-detail change.</li>
+<li><b>Access</b> — multi-factor authentication, strong password policies, <b>least privilege</b>, prompt removal of leavers' access.</li>
+<li><b>Technology</b> — firewalls, antivirus/endpoint protection, encryption, intrusion detection/prevention, timely <b>patching</b>, input validation (stops SQL injection).</li>
+<li><b>Testing & response</b> — vulnerability scans, <b>penetration testing</b> (ethical hacking), incident-response plan, offline/immutable backups against ransomware.</li>
+</ul>
+
+<h3 id="f-x-ai"><span class="num">10</span>AI, cloud, blockchain & smart contracts</h3>
+<h4>10.1 Artificial intelligence</h4>
+<ul>
+<li><b>Machine learning</b> — <b>supervised</b> (learns from labelled examples, e.g. fraud/not fraud → classification or regression), <b>unsupervised</b> (finds structure in unlabelled data, e.g. clustering customers), <b>reinforcement</b> (learns by reward).</li>
+<li><b>Natural language processing</b> — reading contracts and invoices; <b>generative AI</b> — produces text, code and images (useful for drafting, but can "hallucinate", so outputs need human review).</li>
+<li><b>Risks</b> — biased training data, lack of explainability ("black box"), data privacy, over-reliance without professional judgement.</li>
+</ul>
+<h4>10.2 Cloud computing</h4>
+<table><thead><tr><th>Model</th><th>Provider manages</th><th>Example</th></tr></thead><tbody>
+<tr><td><b>IaaS</b></td><td>Servers, storage, network</td><td>Renting virtual servers</td></tr>
+<tr><td><b>PaaS</b></td><td>+ operating system & development platform</td><td>Building apps on a hosted platform</td></tr>
+<tr><td><b>SaaS</b></td><td>Everything — you just use the software</td><td>Online email, cloud ERP</td></tr>
+</tbody></table>
+<p>Deployment: <b>public</b> (shared provider), <b>private</b> (one organisation), <b>hybrid</b> (mix). Benefits: scalability, pay-as-you-go, less capital spending, remote access. Risks: data security and location, vendor lock-in, service outages, regulatory compliance — so review the provider's <b>SOC reports</b> and contract terms.</p>
+<h4>10.3 Blockchain & smart contracts</h4>
+<ul>
+<li>A <b>blockchain</b> is a distributed ledger: transactions are grouped into <b>blocks</b>; each block contains a <b>hash</b> (digital fingerprint) of the previous block, so altering any past record breaks every later hash — making the chain <b>tamper-evident</b>.</li>
+<li><b>Consensus mechanisms</b> (e.g. proof of work, proof of stake) let participants agree which blocks are valid without a central authority.</li>
+<li><b>Public (permissionless)</b> chains — anyone can join (cryptocurrencies). <b>Private (permissioned)</b> chains — known participants (supply-chain consortia).</li>
+<li><b>Smart contracts</b> — self-executing code on a blockchain that performs an action automatically when conditions are met (e.g. release payment when delivery is confirmed).</li>
+<li><b>Accounting uses</b> — shared, real-time ledgers between trading partners, fewer reconciliations, provenance tracking, continuous audit. <b>Limits</b> — garbage in is still garbage (the chain proves a record wasn't changed, not that it was true), energy use, scalability, regulation.</li>
+</ul>
+
+<h3 id="f-x-mine"><span class="num">11</span>Data mining techniques</h3>
+<table><thead><tr><th>Technique</th><th>What it does</th><th>Finance example</th></tr></thead><tbody>
+<tr><td><b>Classification</b></td><td>Assigns items to predefined classes</td><td>Approve / reject a credit application</td></tr>
+<tr><td><b>Clustering</b></td><td>Groups similar items with no predefined classes</td><td>Segmenting customers by buying behaviour</td></tr>
+<tr><td><b>Association rules</b></td><td>Finds items that occur together</td><td>Market-basket analysis ("buyers of X also buy Y")</td></tr>
+<tr><td><b>Regression</b></td><td>Predicts a numeric value</td><td>Forecasting costs or sales</td></tr>
+<tr><td><b>Anomaly (outlier) detection</b></td><td>Flags unusual records</td><td>Duplicate payments, fraudulent expense claims</td></tr>
+<tr><td><b>Time-series analysis</b></td><td>Patterns over time</td><td>Seasonal demand forecasting</td></tr>
+</tbody></table>
+<p>The data-mining process: understand the business question → collect and <b>clean/prepare</b> data (usually the biggest effort) → build the model → evaluate on held-out data → deploy and monitor. Exploratory data analysis comes first to spot errors, missing values and outliers.</p>
+
+<h3 id="f-x-sim"><span class="num">12</span>Sensitivity analysis & simulation</h3>
+<div class="ex"><span class="lbl">Worked example — sensitivity analysis</span>
+Base case: 10,000 units, price 50, variable cost 30, fixed costs 120,000.
+<div class="formula">Base profit = 10,000 × (50 − 30) − 120,000 = 80,000
+Price −10% (45):          10,000 × 15 − 120,000 = 30,000  (−62.5%)
+Volume −10% (9,000):       9,000 × 20 − 120,000 = 60,000  (−25%)
+Variable cost +10% (33):  10,000 × 17 − 120,000 = 50,000  (−37.5%)</div>
+Profit is most sensitive to <b>price</b> — so price assumptions deserve the most scrutiny and monitoring.</div>
+<ul>
+<li><b>Sensitivity analysis</b> changes <b>one</b> input at a time to see the effect.</li>
+<li><b>Scenario analysis</b> changes <b>several</b> inputs together (best / base / worst).</li>
+<li><b>Monte Carlo simulation</b> assigns a <b>probability distribution</b> to each uncertain input, draws random values thousands of times, and produces a <b>distribution of outcomes</b> — e.g. "there is a 15% chance profit falls below zero." Strength: captures many uncertainties at once. Weakness: only as good as the assumed distributions.</li>
+<li><b>What-if analysis</b> in spreadsheets (goal seek, data tables) is the everyday version.</li>
+</ul>
+
+<h3 id="f-x-viz"><span class="num">13</span>Visualisation best practice & dashboards</h3>
+<ul>
+<li>Start from the <b>audience and the question</b>; one main message per chart.</li>
+<li>Maximise the <b>data-ink ratio</b> — remove gridlines, 3-D effects and decoration that carry no data.</li>
+<li>Start bar-chart axes at <b>zero</b>; keep scales consistent across charts compared side by side.</li>
+<li>Use colour to <b>highlight</b>, not decorate; consider colour-blind-safe palettes.</li>
+<li><b>Dashboards</b> show a small set of KPIs, compared with targets or prior periods, with drill-down for detail; <b>heat maps</b> show intensity across two dimensions; <b>waterfall charts</b> bridge one figure to another (e.g. budget profit to actual profit by variance).</li>
+</ul>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+In a relational database, the Invoices table contains a CustomerID field that links to the Customers table. What is CustomerID in the Invoices table?
+<details><summary>Show the answer</summary><p>A <b>foreign key</b> (it is the primary key of the Customers table).</p></details></div>
+<div class="exercise"><span class="lbl">Try it yourself</span>
+An accounts-payable clerk receives an email that appears to be from a supplier asking to change bank details before a large payment. What attack might this be, and what control should stop it?
+<details><summary>Show the answer</summary><p><b>Business email compromise / phishing.</b> Control: <b>independent call-back verification</b> using contact details already on file (not those in the email) before any change to vendor master data.</p></details></div>
 `;
 SEED.A=[
  {q:"Under U.S. GAAP, which inventory cost-flow assumption is prohibited by IFRS?",options:["FIFO","Weighted average","LIFO","Specific identification"],answer:2,explanation:"IFRS prohibits LIFO. U.S. GAAP permits it, which is a headline GAAP-vs-IFRS difference.",topic:"Inventory valuation"},
