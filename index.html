@@ -258,6 +258,7 @@ a{color:var(--teal)}
       <a data-route="tutor"><span class="dot">✦</span> AI Tutor (voice)</a>
       <a data-route="library"><span class="dot">▤</span> Resource Library</a>
       <a data-route="docs"><span class="dot">▣</span> My Documents</a>
+      <a data-route="aisetup"><span class="dot">⚙</span> AI Setup</a>
       <div class="lbl">Syllabus Modules</div>
       <div id="modnav"></div>
     </nav>
@@ -500,19 +501,66 @@ async function saveProgress(){ await sSet('cma_progress', PROGRESS); }
    Anthropic API (Claude-in-Claude). Works inside Claude.ai.
    ============================================================ */
 let API_OK = true;
+/* ---------- AI connection (Cloudflare Worker proxy) ---------- */
+let AICFG=null;
+async function getAICfg(){ if(AICFG) return AICFG; AICFG=(await sGet('ai_cfg'))||{url:'',token:'',lang:'singlish'}; return AICFG; }
+async function saveAICfg(c){ AICFG=c; await sSet('ai_cfg',c); }
 async function callClaude(system, userContent, maxTokens){
-  const res = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      model:"claude-sonnet-4-6", max_tokens: maxTokens||1000,
-      system: system,
-      messages: Array.isArray(userContent)? userContent : [{role:"user",content:userContent}]
-    })
-  });
-  if(!res.ok){ throw new Error("API "+res.status); }
+  const cfg=await getAICfg();
+  const messages=Array.isArray(userContent)? userContent : [{role:"user",content:userContent}];
+  let url="https://api.anthropic.com/v1/messages", headers={"Content-Type":"application/json"};
+  if(cfg.url){ url=cfg.url.trim(); if(cfg.token) headers["X-App-Token"]=cfg.token; }
+  const res = await fetch(url,{ method:"POST", headers,
+    body:JSON.stringify({ model:"claude-sonnet-5-5", max_tokens: maxTokens||1000, system: system, messages }) });
+  if(!res.ok){ let d=''; try{ d=(await res.json()).error; d=typeof d==='object'?(d.message||JSON.stringify(d)):d; }catch(_){} throw new Error("AI "+res.status+(d?": "+d:"")); }
   const data = await res.json();
-  return data.content.filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  return (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
 }
+function langInstruction(lang){
+  if(lang==='si') return ' Reply in Sinhala (Sinhala script). Keep all CMA technical terms, formulas and standard names (e.g. ROI, deferred tax, IFRS 16) in English, because the exam is in English.';
+  if(lang==='singlish') return ' Reply in Singlish: casual Sinhala written in English letters mixed with English, the way Sri Lankan professionals chat (e.g. "Machan, deferred tax kiyanne..."). Keep all CMA technical terms, formulas and numbers in English.';
+  return ' Reply in English.';
+}
+async function renderAISetup(){
+  crumb.innerHTML='AI Setup';
+  const c=await getAICfg();
+  view.innerHTML=`
+   <div class="mhead"><div class="badge">⚙</div><div><h2>AI Setup</h2><div class="meta">Connect the AI tutor, explanations, question generation &amp; podcasts</div></div></div>
+   <div class="callout" style="margin-bottom:18px">The AI runs through <b>your own Cloudflare Worker</b>, which holds your Anthropic API key safely on a server. Paste the Worker URL once on each device/browser. Follow <b>AI-SETUP.md</b> to create it (about 10 minutes).</div>
+   <div class="card" style="padding:20px 22px">
+     <label class="meta" style="display:block;margin-bottom:6px">Worker URL</label>
+     <input id="aiUrl" value="${esc(c.url||'')}" placeholder="https://cma-ai.your-name.workers.dev" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);margin-bottom:14px">
+     <label class="meta" style="display:block;margin-bottom:6px">App token (only if you set APP_TOKEN on the Worker)</label>
+     <input id="aiTok" type="password" value="${esc(c.token||'')}" placeholder="optional" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);margin-bottom:14px">
+     <label class="meta" style="display:block;margin-bottom:6px">Tutor reply language</label>
+     <div class="tabs" id="aiLang" style="margin-bottom:16px">
+       ${[['singlish','Singlish'],['si','සිංහල'],['en','English']].map(([v,l])=>`<button class="tab ${c.lang===v?'active':''}" data-v="${v}" onclick="document.querySelectorAll('#aiLang .tab').forEach(b=>b.classList.remove('active'));this.classList.add('active')">${l}</button>`).join('')}
+     </div>
+     <div style="display:flex;gap:10px;flex-wrap:wrap">
+       <button class="btn" onclick="saveAISetup(true)">Save &amp; test</button>
+       <button class="btn ghost" onclick="saveAISetup(false)">Save</button>
+       ${c.url?'<button class="btn ghost" onclick="clearAISetup()">Disconnect</button>':''}
+     </div>
+     <div id="aiTest" style="margin-top:14px"></div>
+   </div>
+   <p class="meta" style="font-size:12.5px;margin-top:14px">Each AI answer uses your Anthropic API credit (small amounts per question). Set a monthly spend limit in the Anthropic Console so costs can never surprise you.</p>`;
+}
+async function saveAISetup(test){
+  const url=document.getElementById('aiUrl').value.trim(), token=document.getElementById('aiTok').value.trim();
+  const act=document.querySelector('#aiLang .tab.active'); const lang=act?act.dataset.v:'singlish';
+  if(url && !/^https:\/\//i.test(url)){ toast('Worker URL must start with https://'); return; }
+  await saveAICfg({url,token,lang}); toast('Saved');
+  if(!test) return;
+  const box=document.getElementById('aiTest');
+  box.innerHTML='<span class="loader"></span> Testing connection…';
+  try{
+    const r=await callClaude('You are a CMA tutor.'+langInstruction(lang),'In one short sentence, say the AI tutor is connected and ready to help with CMA Part 1.',100);
+    box.innerHTML=`<div class="callout" style="margin:0;border-left-color:#3fbf9a">✅ <b>Connected.</b> ${esc(r)}</div>`;
+  }catch(e){
+    box.innerHTML=`<div class="callout" style="margin:0;border-left-color:var(--red);background:#fbeeee">❌ <b>Not connected:</b> ${esc(e.message)}<br><span class="meta" style="font-size:12px">403 = origin not allowed (check ALLOWED_ORIGINS) · 401 = wrong app token or API key · 500 = key not set · "Failed to fetch" = wrong URL.</span></div>`;
+  }
+}
+async function clearAISetup(){ const c=await getAICfg(); await saveAICfg({url:'',token:'',lang:c.lang}); toast('Disconnected'); renderAISetup(); }
 function extractJSON(txt){
   let t = txt.replace(/```json/gi,"").replace(/```/g,"").trim();
   const s=t.indexOf("["), e=t.lastIndexOf("]");
@@ -559,6 +607,7 @@ function go(route){
   if(route==='tutor') return renderTutor();
   if(route==='library') return renderLibrary();
   if(route==='docs') return renderDocs();
+  if(route==='aisetup') return renderAISetup();
   if(route.startsWith('mod:')) return renderModule(route.slice(4));
 }
 
@@ -1201,7 +1250,7 @@ function offlineTutor(query, curMod){
     return "I couldn't reach the live AI tutor (it runs inside the Claude.ai artifact view). But every topic is fully written up in **Study Notes**. Try opening the Study Notes tab for the relevant section:\n\n"+list+"\n\nOr rephrase your question with a keyword (e.g. \"FIFO\", \"deferred tax\", \"cash budget\", \"COSO\") and I'll point you to the exact section.";
   }
   const top=cand.slice(0,2);
-  let out="Live AI tutor is offline here, so this is a quick lookup from your **Study Notes**:\n";
+  let out="Live AI tutor isn't connected yet (open **⚙ AI Setup** in the sidebar). Meanwhile, here is a quick lookup from your **Study Notes**:\n";
   top.forEach(s=>{
     let ex=s.text; if(ex.length>760) ex=ex.slice(0,760).replace(/\s+\S*$/,'')+'…';
     out+="\n\n**"+s.title+"**  (Section "+s.letter+")\n"+ex;
@@ -1215,8 +1264,8 @@ async function sendChat(key){
   CHATS[key].push({role:'user',content:txt}); drawChat(key);
   const log=document.getElementById('chatLog');
   log.insertAdjacentHTML('beforeend',`<div class="msg a" id="typing"><span class="loader"></span> thinking…</div>`); log.scrollTop=log.scrollHeight;
-  const m=window._chatMod;
-  const sys=`You are an expert, patient CMA (Certified Management Accountant) tutor for IMA CMA Part 1: Financial Planning, Performance, and Analytics.${m?` The student is currently studying Section ${m.id}: ${m.title} (topics: ${m.topics.join(', ')}).`:''} Give accurate, exam-focused answers: define terms, show formulas, work through numbers step by step. Be concise. If a question is outside CMA Part 1, gently redirect. Use **bold** for key terms and dashes for lists.`;
+  const m=window._chatMod; await getAICfg();
+  const sys=`You are an expert, patient CMA (Certified Management Accountant) tutor for IMA CMA Part 1: Financial Planning, Performance, and Analytics.${m?` The student is currently studying Section ${m.id}: ${m.title} (topics: ${m.topics.join(', ')}).`:''} Give accurate, exam-focused answers: define terms, show formulas, work through numbers step by step. Be concise. If a question is outside CMA Part 1, gently redirect. Use **bold** for key terms and dashes for lists.`+langInstruction((AICFG&&AICFG.lang)||'singlish');
   try{
     const history = CHATS[key].map(x=>({role:x.role,content:x.content}));
     const reply=await callClaude(sys, history, 1000);
@@ -1234,7 +1283,7 @@ function toggleMic(key){
   if(!SR){ toast('Speech recognition not supported in this browser.'); return; }
   const btn=document.getElementById('micBtn');
   if(RECON){ REC.stop(); return; }
-  REC=new SR(); REC.lang='en-US'; REC.interimResults=true; REC.continuous=false;
+  REC=new SR(); REC.lang=(AICFG&&AICFG.lang==='si')?'si-LK':'en-US'; REC.interimResults=true; REC.continuous=false;
   RECON=true; btn.classList.add('rec'); btn.textContent='●';
   let finalT='';
   REC.onresult=(e)=>{ let t=''; for(const r of e.results){ t+=r[0].transcript; if(r.isFinal) finalT+=r[0].transcript; } document.getElementById('chatText').value=t; };
@@ -1539,7 +1588,7 @@ function esc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</
 function mdlite(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n\s*[-•]\s?/g,'<br>• ').replace(/\n/g,'<br>'); }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
 function fmtT(s){ s=Math.max(0,s); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
-function apiErr(){ return `<div class="card" style="padding:20px 22px;border-color:#ecc"><b style="color:var(--red)">AI service unavailable.</b><p style="margin:8px 0 0;font-size:14px;color:var(--muted)">The AI-powered features (question generation, tutor, podcasts) run inside the Claude.ai artifact view. If you opened this file directly in a browser, they won't work — open it as an artifact in Claude. Otherwise, try again in a moment.</p></div>`; }
+function apiErr(){ return `<div class="card" style="padding:20px 22px;border-color:#ecc"><b style="color:var(--red)">AI not connected.</b><p style="margin:8px 0 12px;font-size:14px;color:var(--muted)">AI features need your AI connection (Cloudflare Worker). Set it up once and the tutor, explanations, question generation and podcasts all work.</p><button class="btn" onclick="go('aisetup')">⚙ Open AI Setup</button></div>`; }
 
 NOTES.A=`
 <p class="lead"><b>How to read this section.</b> Section A is 15% of the exam. We will start from absolute zero — what a financial statement even is — and build up to the tricky bits (leases, deferred tax, consolidations). For every topic you get: a plain-English explanation, a worked example with numbers, the U.S. GAAP vs IFRS/IAS treatment, and a short exercise with the answer hidden so you can test yourself. Take it slowly and do the exercises.</p>
