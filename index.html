@@ -253,6 +253,7 @@ a{color:var(--teal)}
     <nav class="nav" id="nav">
       <div class="lbl">Overview</div>
       <a data-route="dash" class="active"><span class="dot">◆</span> Dashboard</a>
+      <a data-route="plan"><span class="dot">📅</span> Study Plan</a>
       <a data-route="exam"><span class="dot">▤</span> Pilot Mock Exam</a>
       <a data-route="essays"><span class="dot">✎</span> Essay Practice</a>
       <a data-route="tutor"><span class="dot">✦</span> AI Tutor (voice)</a>
@@ -490,8 +491,16 @@ const NOTES={}, SEED={}, PODSCRIPT={};
    Storage (window.storage in artifact; fallback in-memory)
    ============================================================ */
 const mem = {};
-async function sGet(k){ try{ if(window.storage){const r=await window.storage.get(k); return r?JSON.parse(r.value):null;} }catch(e){} return mem[k]!==undefined?mem[k]:null; }
-async function sSet(k,v){ mem[k]=v; try{ if(window.storage){await window.storage.set(k,JSON.stringify(v));} }catch(e){} }
+async function sGet(k){
+  try{ if(window.storage){ const r=await window.storage.get(k); if(r) return JSON.parse(r.value); } }catch(e){}
+  try{ const v=localStorage.getItem('cma:'+k); if(v!==null) return JSON.parse(v); }catch(e){}
+  return mem[k]!==undefined?mem[k]:null;
+}
+async function sSet(k,v){
+  mem[k]=v;
+  try{ if(window.storage){ await window.storage.set(k,JSON.stringify(v)); } }catch(e){}
+  try{ localStorage.setItem('cma:'+k, JSON.stringify(v)); }catch(e){}
+}
 
 let PROGRESS = {}; // {A:{answered:n, correct:n, seen:{}}}
 async function loadProgress(){ PROGRESS = (await sGet('cma_progress')) || {}; MODULES.forEach(m=>{ if(!PROGRESS[m.id]) PROGRESS[m.id]={answered:0,correct:0,topics:{}}; if(!PROGRESS[m.id].topics) PROGRESS[m.id].topics={}; }); }
@@ -605,6 +614,7 @@ function go(route){
   setActive(route);
   if(route==='dash') return renderDash();
   if(route==='exam') return renderExam();
+  if(route==='plan') return renderPlan();
   if(route==='essays') return renderEssayHub();
   if(route==='tutor') return renderTutor();
   if(route==='library') return renderLibrary();
@@ -640,6 +650,7 @@ function renderDash(){
      <h2>Your exam readiness, tracked as you practise.</h2>
      <p>Answer practice questions and take mocks — this dashboard shows how ready you are and exactly which topics to revise before exam day.</p>
    </div>
+   ${planTodayCard()}
    <div class="grid g2" style="margin-top:18px">
      <div class="card" style="padding:24px;text-align:center">
        <div class="l" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted)">Exam readiness</div>
@@ -1426,6 +1437,231 @@ async function openHockUnit(id,i){
     </div>
     <iframe src="${src}" style="width:100%;height:80vh;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>
     <p class="meta" style="font-size:12px;margin-top:8px">If the viewer opens on page 1 (some phone browsers ignore page links), use "Open in new tab" or scroll to book page ${u.p-HOCK_OFFSET}.</p>`;
+}
+
+/* ---------- Study Plan + reminders ---------- */
+const PLAN_DEF={exam:'2027-06-15',start:null,wdTime:'20:00',wdMin:90,friMin:45,weTime:'09:00',satMin:180,sunMin:120,remind:true};
+let PLANCFG=null, PLANDONE={}, PLANCACHE=null, SNOOZE=0, REMTIMER=null;
+function isoDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function fmtDay(iso){ return parseISO(iso).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+async function loadPlan(){
+  const saved=await sGet('plan_cfg');
+  PLANCFG=Object.assign({},PLAN_DEF,saved||{});
+  if(!PLANCFG.start){ PLANCFG.start=isoDate(new Date()); await sSet('plan_cfg',PLANCFG); }
+  PLANDONE=(await sGet('plan_done'))||{}; PLANCACHE=null;
+}
+function buildPlan(){
+  if(PLANCACHE) return PLANCACHE;
+  const c=PLANCFG, s=parseISO(c.start), ex=parseISO(c.exam);
+  const D=Math.round((ex-s)/86400000);
+  if(!(D>=21)) return PLANCACHE=[];
+  const fin=Math.min(14,Math.max(5,Math.round(D*0.08)));
+  const mock=Math.max(7,Math.round(D*0.15)), prac=Math.max(7,Math.round(D*0.15));
+  const learn=D-fin-mock-prac;
+  const wsum=MODULES.reduce((a,m)=>a+m.weight,0);
+  const spans=[]; let acc=0;
+  MODULES.forEach((m,i)=>{ const n=i===MODULES.length-1?learn-acc:Math.round(learn*m.weight/wsum); spans.push({id:m.id,from:acc,to:acc+n}); acc+=n; });
+  const queue={};
+  spans.forEach(sp=>{
+    const units=(typeof HOCKMAP!=='undefined'&&HOCKMAP[sp.id])||[];
+    let sess=0; for(let i=sp.from;i<sp.to;i++){ const wd=addDays(s,i).getDay(); if(wd!==0&&wd!==5) sess++; }
+    const per=Math.max(1,Math.ceil(units.length/Math.max(1,sess)));
+    const chunks=[]; for(let i=0;i<units.length;i+=per) chunks.push(units.slice(i,i+per));
+    queue[sp.id]={chunks,idx:0};
+  });
+  const days=[];
+  for(let i=0;i<D;i++){
+    const date=addDays(s,i), wd=date.getDay(), iso=isoDate(date);
+    const sat=wd===6, sun=wd===0, fri=wd===5;
+    const e={date:iso,time:(sat||sun)?c.weTime:c.wdTime,mins:sat?c.satMin:sun?c.sunMin:fri?c.friMin:c.wdMin,phase:'',title:'',detail:'',act:null,actLabel:''};
+    if(i<learn){
+      const sp=spans.find(x=>i>=x.from&&i<x.to), m=MODULES.find(x=>x.id===sp.id); e.phase='Learn';
+      if(fri){ const so=spans.filter(x=>x.from<=i).map(x=>x.id).join(', '); e.title='Weekly review quiz'; e.detail=`25 mixed MCQs from sections studied so far (${so}). Re-read Short Notes for anything you get wrong.`; e.act=`renderModule('${m.id}','practice')`; e.actLabel='Open Practice'; }
+      else if(sun){ e.title=`Practice day — Section ${m.letter}`; e.detail=`40 MCQs in Section ${m.letter} Practice + 1 essay from Essay Practice. Then check Dashboard weak areas.`; e.act=`renderModule('${m.id}','practice')`; e.actLabel='Start Practice'; }
+      else { const q=queue[m.id], ch=q.chunks[q.idx];
+        if(ch){ q.idx++; e.title=`Learn ${m.letter}: SU ${ch.map(u=>u.u).join(', ')}`; e.detail=`Read in HOCK: ${ch.map(u=>'SU '+u.u+' '+u.t).join(' · ')}. Then the matching app Study Notes + 15 practice MCQs.`+(sat?' Long session: work through every worked example too.':''); e.act=`renderModule('${m.id}','notes')`; e.actLabel='Open Study Notes'; }
+        else { e.title=`Consolidate Section ${m.letter}`; e.detail=`Redo the "Try it yourself" exercises in Section ${m.letter} notes + 30 practice MCQs. Aim for 75%+.`; e.act=`renderModule('${m.id}','practice')`; e.actLabel='Start Practice'; } }
+    } else if(i<learn+prac){
+      const m=MODULES[(i-learn)%MODULES.length]; e.phase='Practice';
+      if(sat){ e.title=`Timed essay + practice — Section ${m.letter}`; e.detail=`Timed essay exam (2 scenarios, 60 min) for Section ${m.letter}, then 40 MCQs. Self-mark against the key points.`; e.act=`go('essays')`; e.actLabel='Open Essay Practice'; }
+      else if(sun){ e.title='Mixed practice — all sections'; e.detail='60 MCQs across all six sections (10 each). Note every wrong topic and revise it in HOCK.'; e.act=`go('dash')`; e.actLabel='Open Dashboard'; }
+      else { e.title=`Weak-area day — Section ${m.letter}`; e.detail=`Open Dashboard weak topics for Section ${m.letter}, re-read those HOCK units, then 30–40 MCQs. Target 75%+.`; e.act=`renderModule('${m.id}','practice')`; e.actLabel='Start Practice'; }
+    } else if(i<learn+prac+mock){
+      const m=MODULES[(i-learn-prac)%MODULES.length]; e.phase='Mock';
+      if(sat){ e.title='FULL MOCK EXAM — 100 MCQs, 3 hours'; e.detail='Exam conditions: no notes, no phone, timer on. Then review every wrong answer.'; e.act=`go('exam')`; e.actLabel='Start Mock'; e.mins=Math.max(c.satMin,240); }
+      else if(sun){ e.title='Timed essay exam + mock review'; e.detail='Timed 2-scenario essay (60 min), then revise the topics you missed in yesterday’s mock.'; e.act=`go('essays')`; e.actLabel='Open Essay Practice'; }
+      else { e.title=`Mock follow-up — Section ${m.letter}`; e.detail=`Fix last mock’s mistakes in Section ${m.letter}: re-read notes/HOCK for each missed topic, then 30 MCQs.`; e.act=`renderModule('${m.id}','practice')`; e.actLabel='Start Practice'; }
+    } else {
+      const left=D-i, m=MODULES[i%MODULES.length]; e.phase='Final';
+      if(left===1){ e.title='Rest day before the exam'; e.detail='Only a 30-minute formula glance. Confirm your Prometric appointment, ID and route. Sleep early.'; e.mins=30; }
+      else if(left===2){ e.title='Final light review'; e.detail='Skim Short Notes for all six sections. No new topics. Early night.'; e.mins=60; e.act=`go('dash')`; e.actLabel='Open Dashboard'; }
+      else if(sat){ e.title='Final full mock — 100 MCQs'; e.detail='Last full mock under exam conditions. Target 75%+. Review mistakes only.'; e.act=`go('exam')`; e.actLabel='Start Mock'; e.mins=Math.max(c.satMin,240); }
+      else { e.title=`Rapid revision — Section ${m.letter}`; e.detail=`Short Notes + Mind Map + formulas for Section ${m.letter}, then 25 MCQs on weak topics.`; e.act=`renderModule('${m.id}','short')`; e.actLabel='Open Short Notes'; }
+    }
+    days.push(e);
+  }
+  days.push({date:c.exam,time:'',mins:0,phase:'Exam',title:'EXAM DAY — CMA Part 1',detail:'Arrive early with your ID. Read every question carefully and manage time: 100 MCQs in 3 hours, then the essays. You have prepared — trust it.',act:null});
+  return PLANCACHE=days;
+}
+function phaseColor(p){ return {Learn:'var(--teal)',Practice:'var(--gold)',Mock:'#c96f4a',Final:'#7a5cc2',Exam:'var(--red)'}[p]||'var(--muted)'; }
+function planStats(){
+  const days=buildPlan(), today=isoDate(new Date());
+  const due=days.filter(d=>d.date<=today&&d.phase!=='Exam'), done=due.filter(d=>PLANDONE[d.date]).length;
+  const left=Math.max(0,Math.round((parseISO(PLANCFG.exam)-parseISO(today))/86400000));
+  return {days,today,due:due.length,done,left,total:days.length-1};
+}
+function planTodayCard(){
+  if(!PLANCFG) return '';
+  const st=planStats(), e=st.days.find(d=>d.date===st.today);
+  if(!st.days.length) return '';
+  const isDone=e&&PLANDONE[e.date];
+  return `<div class="card" style="padding:18px 22px;margin-top:18px;border-left:4px solid ${e?phaseColor(e.phase):'var(--teal)'}">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+      <div class="meta" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px">Today's study session · ${st.left} days to exam</div>
+      <a onclick="go('plan')" style="cursor:pointer;font-size:13px">Full plan →</a></div>
+    ${e?`<div style="font-size:17px;font-weight:600;margin:6px 0 4px">${isDone?'✅ ':''}${esc(e.title)}</div>
+      <div class="meta" style="font-size:13px">${e.time?e.time+' · '+e.mins+' min · ':''}${e.phase} phase</div>
+      <div style="font-size:14px;margin:8px 0 12px">${esc(e.detail)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${e.act?`<button class="btn" onclick="${e.act}">${e.actLabel} →</button>`:''}<button class="btn ghost" onclick="togglePlanDone('${e.date}',true)">${isDone?'Mark not done':'Mark done ✓'}</button></div>`
+      :`<div style="margin-top:6px">No session today.</div>`}
+  </div>`;
+}
+async function togglePlanDone(iso,refreshDash){
+  if(PLANDONE[iso]) delete PLANDONE[iso]; else PLANDONE[iso]=true;
+  await sSet('plan_done',PLANDONE);
+  if(refreshDash&&document.querySelector('.nav a.active')&&document.querySelector('.nav a.active').dataset.route==='dash') renderDash(); else renderPlan();
+}
+function renderPlan(){
+  crumb.innerHTML='Study Plan';
+  const c=PLANCFG, st=planStats(), days=st.days;
+  if(!days.length){ view.innerHTML=`<div class="card" style="padding:22px">Set an exam date at least 3 weeks after the start date.</div>`+planSettingsHTML(true); return; }
+  const pct=st.due?Math.round(st.done/st.due*100):0;
+  const phases=[]; days.forEach(d=>{ const l=phases[phases.length-1]; if(!l||l.p!==d.phase) phases.push({p:d.phase,from:d.date,to:d.date,n:1}); else { l.to=d.date; l.n++; } });
+  const ti=days.findIndex(d=>d.date>=st.today), week=days.slice(Math.max(0,ti),Math.max(0,ti)+7);
+  const months={}; days.forEach(d=>{ const k=d.date.slice(0,7); (months[k]=months[k]||[]).push(d); });
+  const row=d=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid var(--line);${d.date===st.today?'background:var(--teal-soft);border-radius:8px':''}">
+      <input type="checkbox" ${PLANDONE[d.date]?'checked':''} ${d.phase==='Exam'?'disabled':''} onchange="togglePlanDone('${d.date}')" style="margin-top:4px;width:17px;height:17px;accent-color:var(--teal)">
+      <div style="width:92px;flex:none"><div style="font-weight:600;font-size:13px">${fmtDay(d.date)}</div><div class="mono" style="font-size:11px;color:var(--muted)">${d.time?d.time+' · '+d.mins+'m':''}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500">${esc(d.title)} <span class="mono" style="font-size:10px;color:${phaseColor(d.phase)}">${d.phase.toUpperCase()}</span></div>
+      <div class="meta" style="font-size:12.5px">${esc(d.detail)}</div></div>
+      ${d.act?`<button class="btn ghost sm" onclick="${d.act}" style="flex:none">Go →</button>`:''}</div>`;
+  view.innerHTML=`
+   <div class="mhead"><div class="badge">📅</div><div><h2>Study Plan</h2><div class="meta">Exam ${fmtDay(c.exam)} ${c.exam.slice(0,4)} · ${st.left} days to go · daily reminders</div></div></div>
+   <div class="grid g3" style="margin-bottom:6px">
+     <div class="card stat"><div class="n mono">${st.left}</div><div class="l">Days to exam</div></div>
+     <div class="card stat"><div class="n mono" style="color:var(--gold)">${pct}%</div><div class="l">Sessions done so far (${st.done}/${st.due})</div></div>
+     <div class="card stat"><div class="n mono">${st.total}</div><div class="l">Planned sessions</div></div>
+   </div>
+   ${planTodayCard()}
+   <div class="card" style="padding:18px 22px;margin-top:16px">
+     <h3 style="font-size:16px;margin:0 0 6px">🔔 Reminders</h3>
+     <p class="meta" style="font-size:13px;margin:0 0 12px">In-app pop-up + notification at each session time while the app is open (a browser tab or the installed app). For reminders even when the app is <b>closed</b>, add the plan to your phone/Google calendar — each session gets a 10-minute alert.</p>
+     <div style="display:flex;gap:8px;flex-wrap:wrap">
+       <button class="btn" onclick="enableReminders()">${(window.Notification&&Notification.permission==='granted')?'✅ Notifications on':'Enable notifications'}</button>
+       <button class="btn gold" onclick="downloadICS()">📆 Add all sessions to calendar (.ics)</button>
+       <button class="btn ghost" onclick="testReminder()">Test pop-up</button>
+     </div></div>
+   <div class="card" style="padding:18px 22px;margin-top:16px">
+     <h3 style="font-size:16px;margin:0 0 10px">Phases</h3>
+     ${phases.map(p=>`<div style="display:flex;gap:12px;align-items:center;padding:6px 0"><span style="width:10px;height:10px;border-radius:50%;background:${phaseColor(p.p)};flex:none"></span><b style="width:80px">${p.p}</b><span class="meta" style="font-size:13px">${fmtDay(p.from)} → ${fmtDay(p.to)} · ${p.n} day${p.n>1?'s':''}</span></div>`).join('')}
+   </div>
+   <div class="card" style="padding:18px 22px;margin-top:16px"><h3 style="font-size:16px;margin:0 0 6px">Next 7 days</h3>${week.map(row).join('')}</div>
+   <h3 style="font-size:17px;margin:24px 0 10px">Full plan</h3>
+   ${Object.keys(months).map(k=>{ const ds=months[k], dn=ds.filter(d=>PLANDONE[d.date]).length;
+      return `<details class="card" style="padding:12px 18px;margin-bottom:10px" ${k===st.today.slice(0,7)?'open':''}><summary style="cursor:pointer;font-weight:600">${parseISO(k+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'})} <span class="meta" style="font-weight:400;font-size:12px">· ${dn}/${ds.length} done</span></summary>${ds.map(row).join('')}</details>`; }).join('')}
+   ${planSettingsHTML(false)}`;
+}
+function planSettingsHTML(open){
+  const c=PLANCFG, inp=(id,type,val,extra)=>`<input id="${id}" type="${type}" value="${val}" ${extra||''} style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:14px">`;
+  return `<details class="card" style="padding:14px 18px;margin-top:16px" ${open?'open':''}><summary style="cursor:pointer;font-weight:600">⚙ Plan settings</summary>
+    <div class="grid g2" style="margin-top:12px;gap:12px">
+      <label class="meta">Exam date<br>${inp('pExam','date',c.exam)}</label>
+      <label class="meta">Plan start date<br>${inp('pStart','date',c.start)}</label>
+      <label class="meta">Weekday time (Mon–Fri)<br>${inp('pWdT','time',c.wdTime)}</label>
+      <label class="meta">Weekend time (Sat–Sun)<br>${inp('pWeT','time',c.weTime)}</label>
+      <label class="meta">Mon–Thu minutes<br>${inp('pWd','number',c.wdMin,'min="20" max="300"')}</label>
+      <label class="meta">Friday (review) minutes<br>${inp('pFri','number',c.friMin,'min="15" max="300"')}</label>
+      <label class="meta">Saturday minutes<br>${inp('pSat','number',c.satMin,'min="30" max="480"')}</label>
+      <label class="meta">Sunday minutes<br>${inp('pSun','number',c.sunMin,'min="30" max="480"')}</label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin:14px 0"><input id="pRem" type="checkbox" ${c.remind!==false?'checked':''} style="accent-color:var(--teal)"> Show pop-up reminders at session time</label>
+    <button class="btn" onclick="savePlanSettings()">Save &amp; rebuild plan</button>
+    <p class="meta" style="font-size:12px;margin:10px 0 0">Changing dates rebuilds the schedule. Ticks you already made stay on their dates. If you change times, download the calendar file again.</p></details>`;
+}
+async function savePlanSettings(){
+  const v=id=>document.getElementById(id).value;
+  const n=(id,d)=>{ const x=parseInt(v(id),10); return isFinite(x)&&x>0?x:d; };
+  if(!v('pExam')||!v('pStart')){ toast('Please set both dates'); return; }
+  PLANCFG={exam:v('pExam'),start:v('pStart'),wdTime:v('pWdT')||'20:00',weTime:v('pWeT')||'09:00',wdMin:n('pWd',90),friMin:n('pFri',45),satMin:n('pSat',180),sunMin:n('pSun',120),remind:document.getElementById('pRem').checked};
+  await sSet('plan_cfg',PLANCFG); PLANCACHE=null; toast('Plan rebuilt'); renderPlan();
+}
+/* ---- reminders ---- */
+function startReminderLoop(){ if(REMTIMER) clearInterval(REMTIMER); REMTIMER=setInterval(checkReminder,20000); setTimeout(checkReminder,4000); }
+async function checkReminder(){
+  if(!PLANCFG||PLANCFG.remind===false) return;
+  const now=new Date(), iso=isoDate(now), e=buildPlan().find(d=>d.date===iso);
+  if(!e||!e.time||PLANDONE[iso]) return;
+  if(SNOOZE){ if(now>=SNOOZE){ SNOOZE=0; showReminder(e); } return; }
+  const p=e.time.split(':').map(Number), t=new Date(now); t.setHours(p[0],p[1],0,0);
+  const diff=now-t; const shown=(await sGet('rem_shown'))||{};
+  if(diff>=0&&diff<15*60000&&!shown[iso]){ shown[iso]=1; await sSet('rem_shown',shown); showReminder(e); }
+}
+function chime(){ try{ const A=window.AudioContext||window.webkitAudioContext; const ctx=new A(); [660,880,990].forEach((f,i)=>{ const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=f; o.connect(g); g.connect(ctx.destination); const t=ctx.currentTime+i*0.22; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.03); g.gain.exponentialRampToValueAtTime(0.0001,t+0.2); o.start(t); o.stop(t+0.22); }); }catch(_){} }
+function sysNotify(e){
+  try{
+    if(!window.Notification||Notification.permission!=='granted') return;
+    const title='📚 CMA study time'+(e.time?' — '+e.time:''), opt={body:e.title,icon:'icon-192.png',tag:'cma-'+e.date};
+    if(navigator.serviceWorker&&navigator.serviceWorker.controller){ navigator.serviceWorker.ready.then(r=>r.showNotification(title,opt)).catch(()=>new Notification(title,opt)); }
+    else new Notification(title,opt);
+  }catch(_){}
+}
+function showReminder(e){
+  chime(); sysNotify(e);
+  const old=document.getElementById('remModal'); if(old) old.remove();
+  const d=document.createElement('div'); d.id='remModal';
+  d.style.cssText='position:fixed;inset:0;background:rgba(16,32,29,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:18px';
+  d.innerHTML=`<div class="card" style="max-width:460px;width:100%;padding:24px 24px 20px;border-top:5px solid ${phaseColor(e.phase)}">
+     <div class="meta" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px">📚 Study time${e.time?' · '+e.time:''}${e.mins?' · '+e.mins+' min':''}</div>
+     <div style="font-size:19px;font-weight:700;margin:8px 0">${esc(e.title)}</div>
+     <div style="font-size:14px;margin-bottom:16px">${esc(e.detail)}</div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap">
+       ${e.act?`<button class="btn" id="remGo">${e.actLabel} →</button>`:''}
+       <button class="btn ghost" id="remSnooze">Snooze 10 min</button>
+       <button class="btn ghost" id="remClose">Dismiss</button></div></div>`;
+  document.body.appendChild(d);
+  const close=()=>d.remove();
+  if(e.act) d.querySelector('#remGo').onclick=()=>{ close(); new Function(e.act)(); };
+  d.querySelector('#remSnooze').onclick=()=>{ SNOOZE=new Date(Date.now()+10*60000); close(); toast('Reminder snoozed for 10 minutes'); };
+  d.querySelector('#remClose').onclick=close;
+}
+async function enableReminders(){
+  if(!window.Notification){ toast('This browser does not support notifications — in-app pop-ups still work.'); return; }
+  const p=await Notification.requestPermission();
+  toast(p==='granted'?'Notifications enabled':'Notifications blocked — in-app pop-ups still work');
+  renderPlan();
+}
+function testReminder(){ const e=buildPlan().find(d=>d.date>=isoDate(new Date()))||{title:'Test session',detail:'This is how your reminder will look.',phase:'Learn',time:'',mins:0}; showReminder(e); }
+/* ---- calendar export (.ics) ---- */
+function icsEsc(s){ return String(s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function icsFold(l){ const o=[]; while(l.length>60){ o.push(l.slice(0,60)); l=' '+l.slice(60); } o.push(l); return o.join('\r\n'); }
+function icsDT(d){ return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'T'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'00'; }
+function downloadICS(){
+  const today=isoDate(new Date()), stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//CMA Part 1 Prep Studio//Study Plan//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:CMA Part 1 Study Plan'];
+  buildPlan().filter(d=>d.date>=today).forEach(d=>{
+    L.push('BEGIN:VEVENT','UID:cma-p1-'+d.date+'@cma-prep-studio','DTSTAMP:'+stamp);
+    if(d.time){ const p=d.time.split(':').map(Number), st=parseISO(d.date); st.setHours(p[0],p[1],0,0); const en=new Date(st.getTime()+Math.max(15,d.mins)*60000);
+      L.push('DTSTART:'+icsDT(st),'DTEND:'+icsDT(en)); }
+    else { const nx=addDays(parseISO(d.date),1); L.push('DTSTART;VALUE=DATE:'+d.date.replace(/-/g,''),'DTEND;VALUE=DATE:'+isoDate(nx).replace(/-/g,'')); }
+    L.push(icsFold('SUMMARY:'+icsEsc('CMA: '+d.title)),icsFold('DESCRIPTION:'+icsEsc(d.detail+'\n\nOpen the app: https://dushan8868.github.io/CMA-Part-1/')));
+    L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc('CMA study: '+d.title).slice(0,60),'TRIGGER:'+(d.time?'-PT10M':'-PT12H'),'END:VALARM','END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  const blob=new Blob([L.join('\r\n')+'\r\n'],{type:'text/calendar'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='CMA-Part1-Study-Plan.ics'; document.body.appendChild(a); a.click(); a.remove();
+  toast('Calendar file downloaded — import it into Google/phone calendar');
 }
 
 const LIBRARY=[
@@ -3903,7 +4139,7 @@ PODSCRIPT.F=[
 ];
 
 /* ---------- boot ---------- */
-(async function(){ await loadProgress(); buildModNav(); bindNav(); renderDash();
+(async function(){ await loadProgress(); await loadPlan(); startReminderLoop(); buildModNav(); bindNav(); renderDash();
   // warm speech voices
   if(window.speechSynthesis){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=()=>{}; }
 })();
